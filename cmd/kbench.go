@@ -97,7 +97,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		defer configFile.Close()
+		configFile.Close()
 
 		decoder := json.NewDecoder(configFile)
 		testConfig := util.TestConfig{}
