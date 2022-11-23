@@ -100,7 +100,7 @@ func main() {
 
 	sortBenchmarkConfigsByWorkloadSize(testConfigs)
 
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
@@ -109,7 +109,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	//Run each workload(specified by its config file) one after another in the sorted order
+	// Run each workload (specified by its config file) one after another in the sorted order
 	for _, testConfig := range testConfigs {
 		fmt.Printf("Running workload, please check kbench log for details... \n")
 		util.Run(k8sConfig, testConfig, outDirPath)
