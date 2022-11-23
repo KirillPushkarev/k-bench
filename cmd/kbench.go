@@ -41,8 +41,8 @@ import (
 	"time"
 )
 
-var defaultConfig = "./config/default/config.json"
-var defaultOutDir = "."
+var defaultConfigPath = "./config/default/config.json"
+var defaultOutDirPath = "."
 
 func main() {
 	var kubeconfig *string
@@ -56,22 +56,22 @@ func main() {
 	}
 
 	var benchmarkConfigs []string
-	var outDir *string
+	var outDirPath *string
 
 	// Provide the user input option to run a single config file, or all config files under a directory
 	// The config file or directory should be under the current working directory
-	benchmarkConfig := flag.String("benchconfig", defaultConfig, "(optional) benchmark config file")
-	outDir = flag.String("outdir", defaultOutDir, "(optional) output directory for results, defaults to current directory")
+	benchmarkConfigPath := flag.String("benchconfig", defaultConfigPath, "(optional) benchmark config file")
+	outDirPath = flag.String("outdir", defaultOutDirPath, "(optional) output directory for results, defaults to current directory")
 
 	flag.Parse()
 
-	fileInfo, err := os.Stat(*benchmarkConfig)
+	benchmarkConfigFileInfo, err := os.Stat(*benchmarkConfigPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if fileInfo.Mode().IsDir() {
-		configDir := *benchmarkConfig
+	if benchmarkConfigFileInfo.Mode().IsDir() {
+		configDir := *benchmarkConfigPath
 		f, err := os.Open(configDir)
 		if err != nil {
 			log.Fatal(err)
@@ -87,24 +87,24 @@ func main() {
 			}
 		}
 	} else {
-		benchmarkConfigs = append(benchmarkConfigs, *benchmarkConfig)
+		benchmarkConfigs = append(benchmarkConfigs, *benchmarkConfigPath)
 	}
 
-	file, err := os.OpenFile(filepath.Join(*outDir, "kbench.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile(filepath.Join(*outDirPath, "kbench.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer file.Close()
+	defer logFile.Close()
 
-	log.SetOutput(file)
+	log.SetOutput(logFile)
 	formatter := new(log.TextFormatter)
 	formatter.FullTimestamp = true
 	formatter.TimestampFormat = "2006-01-02T15:04:05.000"
 	log.SetFormatter(formatter)
 
 	log.Info("Starting kbench...")
-	fmt.Printf("Starting benchmark, writing logs to " + filepath.Join(*outDir+"/kbench.log") + "... \n")
+	fmt.Printf("Starting benchmark, writing logs to " + filepath.Join(*outDirPath+"/kbench.log") + "... \n")
 
 	var testConfigs []util.TestConfig
 	var configWithPrometheus *util.TestConfig
@@ -136,7 +136,7 @@ func main() {
 		testConfigs = append(testConfigs, testConfig)
 	}
 
-	config, kubeerr := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	k8sConfig, kubeerr := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 
 	if kubeerr != nil {
 		fmt.Printf("Kube config file %v not valid, benchmark exited. \n", *kubeconfig)
@@ -145,9 +145,9 @@ func main() {
 	}
 
 	if configWithPrometheus != nil {
-		client, _ := kubernetes.NewForConfig(config)
-		dynClient, _ := dynamic.NewForConfig(config)
-		pc := prometheus.NewPrometheusController(client, &dynClient, config, configWithPrometheus)
+		client, _ := kubernetes.NewForConfig(k8sConfig)
+		dynClient, _ := dynamic.NewForConfig(k8sConfig)
+		pc := prometheus.NewPrometheusController(client, &dynClient, k8sConfig, configWithPrometheus)
 		pc.EnablePrometheus()
 	}
 
@@ -187,7 +187,7 @@ func main() {
 	//Run each workload(specified by its config file) one after another in the sorted order
 	for _, testConfig := range testConfigs {
 		fmt.Printf("Running workload, please check kbench log for details... \n")
-		util.Run(config, testConfig, outDir)
+		util.Run(k8sConfig, testConfig, outDirPath)
 		time.Sleep(time.Duration(testConfig.SleepTimeAfterRun) * time.Millisecond)
 	}
 
