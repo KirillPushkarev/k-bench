@@ -55,7 +55,6 @@ func main() {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 
-	var benchmarkConfigs []string
 	var outDirPath *string
 
 	// Provide the user input option to run a single config file, or all config files under a directory
@@ -70,25 +69,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if benchmarkConfigFileInfo.Mode().IsDir() {
-		configDir := *benchmarkConfigPath
-		f, err := os.Open(configDir)
-		if err != nil {
-			log.Fatal(err)
-		}
-		files, err := f.Readdir(-1)
-		f.Close()
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, file := range files {
-			if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-				benchmarkConfigs = append(benchmarkConfigs, configDir+"/"+file.Name())
-			}
-		}
-	} else {
-		benchmarkConfigs = append(benchmarkConfigs, *benchmarkConfigPath)
-	}
+	benchmarkConfigs := readBenchmarkConfigs(benchmarkConfigFileInfo, benchmarkConfigPath)
 
 	logFile, err := os.OpenFile(filepath.Join(*outDirPath, "kbench.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -195,6 +176,31 @@ func main() {
 	fmt.Printf("Completed running benchmark, exit. \n")
 
 	return
+}
+
+func readBenchmarkConfigs(benchmarkConfigFileInfo os.FileInfo, benchmarkConfigPath *string) []string {
+	var benchmarkConfigs []string
+	if benchmarkConfigFileInfo.Mode().IsDir() {
+		configDir := *benchmarkConfigPath
+		f, err := os.Open(configDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		files, err := f.Readdir(-1)
+		f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, file := range files {
+			if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
+				benchmarkConfigs = append(benchmarkConfigs, configDir+"/"+file.Name())
+			}
+		}
+	} else {
+		benchmarkConfigs = append(benchmarkConfigs, *benchmarkConfigPath)
+	}
+
+	return benchmarkConfigs
 }
 
 func prompt() {
