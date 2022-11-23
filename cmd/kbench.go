@@ -98,29 +98,7 @@ func main() {
 		pc.EnablePrometheus()
 	}
 
-	// Sort the config files by the lightness of workload, from light to heavy.
-	// This is determined by the maximum number of pods in the config files
-	sort.Slice(testConfigs, func(i, j int) bool {
-		if len(testConfigs[i].Operations) != 0 && len(testConfigs[i].Operations) != 0 {
-			iNumPodsMax := 0
-			jNumPodsMax := 0
-			for _, op := range testConfigs[i].Operations {
-				if op.Pod.Count > iNumPodsMax {
-					iNumPodsMax = op.Pod.Count
-				}
-			}
-			for _, op := range testConfigs[j].Operations {
-				if op.Pod.Count > jNumPodsMax {
-					jNumPodsMax = op.Pod.Count
-				}
-			}
-			return iNumPodsMax < jNumPodsMax
-		}
-		if len(testConfigs[i].Operations) == 0 {
-			return true
-		}
-		return false
-	})
+	sortBenchmarkConfigsByWorkloadSize(testConfigs)
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -206,4 +184,30 @@ func parseBenchmarkConfigs(benchmarkConfigs []string) ([]util.TestConfig, *util.
 	}
 
 	return testConfigs, configWithPrometheus
+}
+
+func sortBenchmarkConfigsByWorkloadSize(testConfigs []util.TestConfig) {
+	// Sort the config files by the lightness of workload, from light to heavy.
+	// This is determined by the maximum number of pods in the config files
+	sort.Slice(testConfigs, func(i, j int) bool {
+		if len(testConfigs[i].Operations) != 0 && len(testConfigs[j].Operations) != 0 {
+			iNumPodsMax := 0
+			jNumPodsMax := 0
+			for _, op := range testConfigs[i].Operations {
+				if op.Pod.Count > iNumPodsMax {
+					iNumPodsMax = op.Pod.Count
+				}
+			}
+			for _, op := range testConfigs[j].Operations {
+				if op.Pod.Count > jNumPodsMax {
+					jNumPodsMax = op.Pod.Count
+				}
+			}
+			return iNumPodsMax < jNumPodsMax
+		}
+		if len(testConfigs[i].Operations) == 0 {
+			return true
+		}
+		return false
+	})
 }
