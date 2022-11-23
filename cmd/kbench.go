@@ -63,12 +63,7 @@ func main() {
 
 	flag.Parse()
 
-	benchmarkConfigFileInfo, err := os.Stat(*benchmarkConfigPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	benchmarkConfigs := readBenchmarkConfigs(benchmarkConfigFileInfo, benchmarkConfigPath)
+	benchmarkConfigs := readBenchmarkConfigs(benchmarkConfigPath)
 
 	logFile, err := os.OpenFile(filepath.Join(*outDirPath, "kbench.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -86,35 +81,7 @@ func main() {
 	log.Info("Starting kbench...")
 	fmt.Printf("Starting benchmark, writing logs to " + filepath.Join(*outDirPath+"/kbench.log") + "... \n")
 
-	var testConfigs []util.TestConfig
-	var configWithPrometheus *util.TestConfig
-
-	for _, benchmarkConfigFile := range benchmarkConfigs {
-		configFile, err := os.OpenFile(benchmarkConfigFile, os.O_RDWR, 0666)
-		if err != nil {
-			fmt.Printf("Can not open benchmark config file %v, benchmark exited. \n",
-				benchmarkConfigFile)
-			os.Exit(1)
-		}
-
-		configFile.Close()
-
-		decoder := json.NewDecoder(configFile)
-		testConfig := util.TestConfig{}
-		err = decoder.Decode(&testConfig)
-
-		if err != nil {
-			fmt.Printf("Can not parse benchmark json config file, error: \n %v \n", err)
-			log.Errorf("Can not parse benchmark json config file, error: %v", err)
-			log.Info("Benchmark exited.")
-			os.Exit(1)
-		}
-
-		if len(testConfig.PrometheusManifestPaths) != 0 {
-			configWithPrometheus = &testConfig
-		}
-		testConfigs = append(testConfigs, testConfig)
-	}
+	testConfigs, configWithPrometheus := parseBenchmarkConfigs(benchmarkConfigs)
 
 	k8sConfig, kubeerr := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 
@@ -177,7 +144,12 @@ func main() {
 	return
 }
 
-func readBenchmarkConfigs(benchmarkConfigFileInfo os.FileInfo, benchmarkConfigPath *string) []string {
+func readBenchmarkConfigs(benchmarkConfigPath *string) []string {
+	benchmarkConfigFileInfo, err := os.Stat(*benchmarkConfigPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var benchmarkConfigs []string
 	if benchmarkConfigFileInfo.Mode().IsDir() {
 		configDir := *benchmarkConfigPath
@@ -200,4 +172,38 @@ func readBenchmarkConfigs(benchmarkConfigFileInfo os.FileInfo, benchmarkConfigPa
 	}
 
 	return benchmarkConfigs
+}
+
+func parseBenchmarkConfigs(benchmarkConfigs []string) ([]util.TestConfig, *util.TestConfig) {
+	var testConfigs []util.TestConfig
+	var configWithPrometheus *util.TestConfig
+
+	for _, benchmarkConfigFile := range benchmarkConfigs {
+		configFile, err := os.OpenFile(benchmarkConfigFile, os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("Can not open benchmark config file %v, benchmark exited. \n",
+				benchmarkConfigFile)
+			os.Exit(1)
+		}
+
+		configFile.Close()
+
+		decoder := json.NewDecoder(configFile)
+		testConfig := util.TestConfig{}
+		err = decoder.Decode(&testConfig)
+
+		if err != nil {
+			fmt.Printf("Can not parse benchmark json config file, error: \n %v \n", err)
+			log.Errorf("Can not parse benchmark json config file, error: %v", err)
+			log.Info("Benchmark exited.")
+			os.Exit(1)
+		}
+
+		if len(testConfig.PrometheusManifestPaths) != 0 {
+			configWithPrometheus = &testConfig
+		}
+		testConfigs = append(testConfigs, testConfig)
+	}
+
+	return testConfigs, configWithPrometheus
 }
