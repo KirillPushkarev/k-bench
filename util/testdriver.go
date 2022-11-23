@@ -196,6 +196,7 @@ func Run(kubeConfig *restclient.Config,
 	}
 
 	// Normalize ops into new WcpOp array if RepeatTimes is not zero
+	// TODO: если указать 1 повторение, то будет сделано 2 повторения
 	normalizedOps := make([]WcpOp, 0)
 	for _, op := range wcpOps {
 		normalizedOps = append(normalizedOps, op)
