@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -202,17 +201,3 @@ func readBenchmarkConfigs(benchmarkConfigFileInfo os.FileInfo, benchmarkConfigPa
 
 	return benchmarkConfigs
 }
-
-func prompt() {
-	fmt.Printf("-> Press Return key to continue.")
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		break
-	}
-	if err := scanner.Err(); err != nil {
-		panic(err)
-	}
-	fmt.Println()
-}
-
-func int32Ptr(i int32) *int32 { return &i }
