@@ -42,7 +42,7 @@ import (
 )
 
 var defaultConfig = "./config/default/config.json"
-var defaultoutDir = "."
+var defaultOutDir = "."
 
 func main() {
 	var kubeconfig *string
@@ -61,7 +61,7 @@ func main() {
 	// Provide the user input option to run a single config file, or all config files under a directory
 	// The config file or directory should be under the current working directory
 	benchmarkConfig := flag.String("benchconfig", defaultConfig, "(optional) benchmark config file")
-	outDir = flag.String("outdir", defaultoutDir, "(optional) output directory for results, defaults to current directory")
+	outDir = flag.String("outdir", defaultOutDir, "(optional) output directory for results, defaults to current directory")
 
 	flag.Parse()
 
@@ -71,12 +71,7 @@ func main() {
 	}
 
 	if fileInfo.Mode().IsDir() {
-		//get all config files under the config directory
-		dir, error := filepath.Abs(filepath.Dir(os.Args[0]))
-		if error != nil {
-			log.Fatal(error)
-		}
-		configDir := dir + "/" + *benchmarkConfig
+		configDir := *benchmarkConfig
 		f, err := os.Open(configDir)
 		if err != nil {
 			log.Fatal(err)
