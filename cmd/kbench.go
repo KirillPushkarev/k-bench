@@ -70,7 +70,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer logFile.Close()
+	defer func(logFile *os.File) {
+		err := logFile.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(logFile)
 
 	log.SetOutput(logFile)
 	formatter := new(log.TextFormatter)
@@ -83,27 +88,27 @@ func main() {
 
 	testConfigs, configWithPrometheus := parseBenchmarkConfigs(benchmarkConfigs)
 
-	k8sConfig, kubeerr := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	k8sConfig, k8sErr := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 
-	if kubeerr != nil {
+	if k8sErr != nil {
 		fmt.Printf("Kube config file %v not valid, benchmark exited. \n", *kubeconfig)
 		os.Exit(1)
 		//panic(err)
 	}
 
 	if configWithPrometheus != nil {
-		client, _ := kubernetes.NewForConfig(k8sConfig)
-		dynClient, _ := dynamic.NewForConfig(k8sConfig)
-		pc := prometheus.NewPrometheusController(client, &dynClient, k8sConfig, configWithPrometheus)
+		k8sClient, _ := kubernetes.NewForConfig(k8sConfig)
+		k8sDynClient, _ := dynamic.NewForConfig(k8sConfig)
+		pc := prometheus.NewPrometheusController(k8sClient, &k8sDynClient, k8sConfig, configWithPrometheus)
 		pc.EnablePrometheus()
 	}
 
 	sortBenchmarkConfigsByWorkloadSize(testConfigs)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	exitNotificationChannel := make(chan os.Signal, 1)
+	signal.Notify(exitNotificationChannel, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-c
+		<-exitNotificationChannel
 		log.Info("Terminating the run after receiving SIGTERM signal.")
 		util.Finalize()
 		os.Exit(1)
@@ -136,10 +141,14 @@ func readBenchmarkConfigs(benchmarkConfigPath *string) []string {
 			log.Fatal(err)
 		}
 		files, err := f.Readdir(-1)
-		f.Close()
 		if err != nil {
 			log.Fatal(err)
 		}
+		err = f.Close()
+		if err != nil {
+			return nil
+		}
+
 		for _, file := range files {
 			if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
 				benchmarkConfigs = append(benchmarkConfigs, configDir+"/"+file.Name())
@@ -164,8 +173,6 @@ func parseBenchmarkConfigs(benchmarkConfigs []string) ([]util.TestConfig, *util.
 			os.Exit(1)
 		}
 
-		configFile.Close()
-
 		decoder := json.NewDecoder(configFile)
 		testConfig := util.TestConfig{}
 		err = decoder.Decode(&testConfig)
@@ -181,14 +188,18 @@ func parseBenchmarkConfigs(benchmarkConfigs []string) ([]util.TestConfig, *util.
 			configWithPrometheus = &testConfig
 		}
 		testConfigs = append(testConfigs, testConfig)
+
+		err = configFile.Close()
+		if err != nil {
+			fmt.Printf("Can not close benchmark json config file, error: \n %v \n", err)
+			log.Errorf("Can not close benchmark json config file, error: %v", err)
+		}
 	}
 
 	return testConfigs, configWithPrometheus
 }
 
 func sortBenchmarkConfigsByWorkloadSize(benchmarkConfigs []util.TestConfig) {
-	// Sort the config files by the lightness of workload, from light to heavy.
-	// This is determined by the maximum number of pods in the config files
 	sort.Slice(benchmarkConfigs, func(i, j int) bool {
 		if len(benchmarkConfigs[i].Operations) != 0 && len(benchmarkConfigs[j].Operations) != 0 {
 			iNumPodsMax := 0
