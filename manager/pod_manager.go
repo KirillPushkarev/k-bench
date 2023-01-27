@@ -103,6 +103,7 @@ type PodManager struct {
 	createToRunLatency, firstToSchedLatency   perf_util.OperationLatencyMetric
 	schedToInitdLatency, initdToReadyLatency  perf_util.OperationLatencyMetric
 	firstToReadyLatency, createToReadyLatency perf_util.OperationLatencyMetric
+	apiCallLatency                            map[string]perf_util.OperationLatencyMetric
 }
 
 func NewPodManager() Manager {
@@ -910,14 +911,13 @@ func (mgr *PodManager) LogStats() {
 		"--------------------------------")
 	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
 
-	var mid, min, max, p99 float32
-	for m, _ := range mgr.apiTimes {
-		mid = float32(mgr.apiTimes[m][len(mgr.apiTimes[m])/2]) / float32(time.Millisecond)
-		min = float32(mgr.apiTimes[m][0]) / float32(time.Millisecond)
-		max = float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1]) / float32(time.Millisecond)
-		p99 = float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1-len(mgr.apiTimes[m])/100]) /
-			float32(time.Millisecond)
-		log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" pod latency: ", mid, min, max, p99)
+	for method, operationLatency := range mgr.apiCallLatency {
+		if operationLatency.Valid {
+			latency := operationLatency.Latency
+			log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" pod latency: ", latency.Mid, latency.Min, latency.Max, latency.P99)
+		} else {
+			log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" pod latency: ", "---", "---", "---", "---")
+		}
 	}
 
 	if mgr.scheToStartLatency.Latency.Mid < 0 {
@@ -931,7 +931,6 @@ func (mgr *PodManager) LogStats() {
 			"and certain results (e.g., client-server e2e latency) above " +
 			"may have been affected.")
 	}
-
 }
 
 func (mgr *PodManager) GetResourceName(userPodPrefix string, opNum int, tid int) string {
@@ -1103,235 +1102,89 @@ func (mgr *PodManager) CalculateStats() {
 	totalLat = 0.0
 	podCount := 0
 	// The below loop groups the latency by operation
-	for p, ct := range mgr.cReadyTimes {
-		opn := mgr.getOpNum(p)
-		if opn == -1 {
+	for podName, readyTime := range mgr.cReadyTimes {
+		opNum := mgr.getOpNum(podName)
+		if opNum == -1 {
 			continue
 		}
-		nl := float32(ct.Time.Sub(mgr.cFirstTimes[p].Time)) / float32(time.Second)
-		latPerOp[opn] = append(latPerOp[opn], nl)
-		totalLat += nl
+		podLatency := float32(readyTime.Time.Sub(mgr.cFirstTimes[podName].Time)) / float32(time.Second)
+		latPerOp[opNum] = append(latPerOp[opNum], podLatency)
+		totalLat += podLatency
 		podCount += 1
 	}
+
+	mgr.podAvgLatency = totalLat / float32(podCount)
 
 	var accStartTime float32
 	accStartTime = 0.0
 	accPods := 0
 
-	for opn, _ := range latPerOp {
-		sort.Slice(latPerOp[opn],
-			func(i, j int) bool { return latPerOp[opn][i] < latPerOp[opn][j] })
+	for opNum, _ := range latPerOp {
+		sort.Slice(latPerOp[opNum],
+			func(i, j int) bool { return latPerOp[opNum][i] < latPerOp[opNum][j] })
 
-		curLen := len(latPerOp[opn])
-		accStartTime += float32(latPerOp[opn][curLen/2])
+		curLen := len(latPerOp[opNum])
+		accStartTime += latPerOp[opNum][curLen/2]
 		accPods += (curLen + 1) / 2
 	}
 
-	mgr.podAvgLatency = totalLat / float32(podCount)
 	mgr.podThroughput = float32(accPods) * float32(60) / accStartTime
 
-	createToSche := make([]time.Duration, 0)
-	scheToStart := make([]time.Duration, 0)
-	startToPulled := make([]time.Duration, 0)
-	pulledToRun := make([]time.Duration, 0)
-	createToRun := make([]time.Duration, 0)
+	var (
+		createToSched []time.Duration
+		schedToStart  []time.Duration
+		startToPulled []time.Duration
+		pulledToRun   []time.Duration
+		createToRun   []time.Duration
 
-	firstToSched := make([]time.Duration, 0)
-	schedToInitd := make([]time.Duration, 0)
-	initdToReady := make([]time.Duration, 0)
-	firstToReady := make([]time.Duration, 0)
+		firstToSched []time.Duration
+		schedToInit  []time.Duration
+		initToReady  []time.Duration
+		firstToReady []time.Duration
 
-	createToReady := make([]time.Duration, 0)
+		createToReady []time.Duration
+	)
 
-	for p, ct := range mgr.createTimes {
-		if st, ok := mgr.scheduleTimes[p]; ok {
-			createToSche = append(createToSche, st.Time.Sub(ct.Time))
-		}
-	}
-	for p, ct := range mgr.scheduleTimes {
-		if st, ok := mgr.startTimes[p]; ok {
-			scheToStart = append(scheToStart, st.Time.Sub(ct.Time))
-		}
-	}
-	for p, ct := range mgr.startTimes {
-		if st, ok := mgr.pulledTimes[p]; ok {
-			startToPulled = append(startToPulled, st.Time.Sub(ct.Time))
-		}
-	}
-	for p, ct := range mgr.pulledTimes {
-		if st, ok := mgr.runTimes[p]; ok {
-			pulledToRun = append(pulledToRun, st.Time.Sub(ct.Time))
-		}
-	}
-	for p, ct := range mgr.runTimes {
-		if st, ok := mgr.createTimes[p]; ok {
-			createToRun = append(createToRun, ct.Time.Sub(st.Time))
-		}
-	}
+	createToSched = calculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
+	schedToStart = calculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
+	startToPulled = calculateLatenciesBetweenStages(mgr.startTimes, mgr.pulledTimes)
+	pulledToRun = calculateLatenciesBetweenStages(mgr.pulledTimes, mgr.runTimes)
+	createToRun = calculateLatenciesBetweenStages(mgr.createTimes, mgr.runTimes)
 
-	for p, ct := range mgr.cFirstTimes {
-		if st, ok := mgr.cSchedTimes[p]; ok {
-			firstToSched = append(firstToSched, st.Time.Sub(ct.Time).
-				Round(time.Microsecond))
-		}
-	}
-	for p, ct := range mgr.cSchedTimes {
-		if st, ok := mgr.cInitedTimes[p]; ok {
-			schedToInitd = append(schedToInitd, st.Time.Sub(ct.Time).
-				Round(time.Microsecond))
-		}
-	}
-	for p, ct := range mgr.cInitedTimes {
-		if st, ok := mgr.cReadyTimes[p]; ok {
-			initdToReady = append(initdToReady, st.Time.Sub(ct.Time).
-				Round(time.Microsecond))
-		}
-	}
-	for p, ct := range mgr.cReadyTimes {
-		if st, ok := mgr.cFirstTimes[p]; ok {
-			firstToReady = append(firstToReady, ct.Time.Sub(st.Time).
-				Round(time.Microsecond))
-		}
+	firstToSched = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cSchedTimes))
+	schedToInit = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cSchedTimes, mgr.cInitedTimes))
+	initToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cInitedTimes, mgr.cReadyTimes))
+	firstToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cReadyTimes))
+
+	createToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.createTimes, mgr.cReadyTimes))
+
+	sortDurations(createToSched)
+	sortDurations(schedToStart)
+	sortDurations(startToPulled)
+	sortDurations(pulledToRun)
+	sortDurations(createToRun)
+	sortDurations(firstToSched)
+	sortDurations(schedToInit)
+	sortDurations(initToReady)
+	sortDurations(firstToReady)
+	sortDurations(createToReady)
+	for method, _ := range mgr.apiTimes {
+		sortDurations(mgr.apiTimes[method])
 	}
 
-	for p, ct := range mgr.cReadyTimes {
-		if st, ok := mgr.createTimes[p]; ok {
-			createToReady = append(createToReady, ct.Time.Sub(st.Time).
-				Round(time.Microsecond))
-		}
+	mgr.createToScheLatency = calculateDurationStatistics(createToSched)
+	mgr.scheToStartLatency = calculateDurationStatistics(schedToStart)
+	mgr.startToPulledLatency = calculateDurationStatistics(startToPulled)
+	mgr.pulledToRunLatency = calculateDurationStatistics(pulledToRun)
+	mgr.createToRunLatency = calculateDurationStatistics(createToRun)
+	mgr.createToReadyLatency = calculateDurationStatistics(createToReady)
+	mgr.firstToSchedLatency = calculateDurationStatistics(firstToSched)
+	mgr.schedToInitdLatency = calculateDurationStatistics(schedToInit)
+	mgr.initdToReadyLatency = calculateDurationStatistics(initToReady)
+	mgr.firstToReadyLatency = calculateDurationStatistics(firstToReady)
+	for method := range mgr.apiTimes {
+		mgr.apiCallLatency[method] = calculateDurationStatistics(mgr.apiTimes[method])
 	}
-
-	sort.Slice(createToSche,
-		func(i, j int) bool { return createToSche[i] < createToSche[j] })
-	sort.Slice(scheToStart,
-		func(i, j int) bool { return scheToStart[i] < scheToStart[j] })
-	sort.Slice(startToPulled,
-		func(i, j int) bool { return startToPulled[i] < startToPulled[j] })
-	sort.Slice(pulledToRun,
-		func(i, j int) bool { return pulledToRun[i] < pulledToRun[j] })
-	sort.Slice(createToRun,
-		func(i, j int) bool { return createToRun[i] < createToRun[j] })
-	sort.Slice(firstToSched,
-		func(i, j int) bool { return firstToSched[i] < firstToSched[j] })
-	sort.Slice(schedToInitd,
-		func(i, j int) bool { return schedToInitd[i] < schedToInitd[j] })
-	sort.Slice(initdToReady,
-		func(i, j int) bool { return initdToReady[i] < initdToReady[j] })
-	sort.Slice(firstToReady,
-		func(i, j int) bool { return firstToReady[i] < firstToReady[j] })
-	sort.Slice(createToReady,
-		func(i, j int) bool { return createToReady[i] < createToReady[j] })
-
-	var mid, min, max, p99 float32
-
-	if len(createToSche) > 0 {
-		mid = float32(createToSche[len(createToSche)/2]) / float32(time.Millisecond)
-		min = float32(createToSche[0]) / float32(time.Millisecond)
-		max = float32(createToSche[len(createToSche)-1]) / float32(time.Millisecond)
-		p99 = float32(createToSche[len(createToSche)-1-len(createToSche)/100]) /
-			float32(time.Millisecond)
-		mgr.createToScheLatency.Valid = true
-		mgr.createToScheLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(scheToStart) > 0 {
-		mid = float32(scheToStart[len(scheToStart)/2]) / float32(time.Millisecond)
-		min = float32(scheToStart[0]) / float32(time.Millisecond)
-		max = float32(scheToStart[len(scheToStart)-1]) / float32(time.Millisecond)
-		p99 = float32(scheToStart[len(scheToStart)-1-len(scheToStart)/100]) /
-			float32(time.Millisecond)
-		mgr.scheToStartLatency.Valid = true
-		mgr.scheToStartLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(startToPulled) > 0 {
-		mid = float32(startToPulled[len(startToPulled)/2]) / float32(time.Millisecond)
-		min = float32(startToPulled[0]) / float32(time.Millisecond)
-		max = float32(startToPulled[len(startToPulled)-1]) / float32(time.Millisecond)
-		p99 = float32(startToPulled[len(startToPulled)-1-len(startToPulled)/100]) /
-			float32(time.Millisecond)
-		mgr.startToPulledLatency.Valid = true
-		mgr.startToPulledLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(pulledToRun) > 0 {
-		mid = float32(pulledToRun[len(pulledToRun)/2]) / float32(time.Millisecond)
-		min = float32(pulledToRun[0]) / float32(time.Millisecond)
-		max = float32(pulledToRun[len(pulledToRun)-1]) / float32(time.Millisecond)
-		p99 = float32(pulledToRun[len(pulledToRun)-1-len(pulledToRun)/100]) /
-			float32(time.Millisecond)
-		mgr.pulledToRunLatency.Valid = true
-		mgr.pulledToRunLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(createToRun) > 0 {
-		mid = float32(createToRun[len(createToRun)/2]) / float32(time.Millisecond)
-		min = float32(createToRun[0]) / float32(time.Millisecond)
-		max = float32(createToRun[len(createToRun)-1]) / float32(time.Millisecond)
-		p99 = float32(createToRun[len(createToRun)-1-len(createToRun)/100]) /
-			float32(time.Millisecond)
-		mgr.createToRunLatency.Valid = true
-		mgr.createToRunLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(createToReady) > 0 {
-		mid = float32(createToReady[len(createToReady)/2]) / float32(time.Millisecond)
-		min = float32(createToReady[0]) / float32(time.Millisecond)
-		max = float32(createToReady[len(createToReady)-1]) / float32(time.Millisecond)
-		p99 = float32(createToReady[len(createToReady)-1-len(createToReady)/100]) /
-			float32(time.Millisecond)
-		if mid < 0 || min < 0 {
-			mgr.negRes = true
-		}
-		mgr.createToReadyLatency.Valid = true
-		mgr.createToReadyLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(firstToSched) > 0 {
-		mid = float32(firstToSched[len(firstToSched)/2]) / float32(time.Millisecond)
-		min = float32(firstToSched[0]) / float32(time.Millisecond)
-		max = float32(firstToSched[len(firstToSched)-1]) / float32(time.Millisecond)
-		p99 = float32(firstToSched[len(firstToSched)-1-len(firstToSched)/100]) /
-			float32(time.Millisecond)
-		mgr.firstToSchedLatency.Valid = true
-		mgr.firstToSchedLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(schedToInitd) > 0 {
-		mid = float32(schedToInitd[len(schedToInitd)/2]) / float32(time.Millisecond)
-		min = float32(schedToInitd[0]) / float32(time.Millisecond)
-		max = float32(schedToInitd[len(schedToInitd)-1]) / float32(time.Millisecond)
-		p99 = float32(schedToInitd[len(schedToInitd)-1-len(schedToInitd)/100]) /
-			float32(time.Millisecond)
-		mgr.schedToInitdLatency.Valid = true
-		mgr.schedToInitdLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(initdToReady) > 0 {
-		mid = float32(initdToReady[len(initdToReady)/2]) / float32(time.Millisecond)
-		min = float32(initdToReady[0]) / float32(time.Millisecond)
-		max = float32(initdToReady[len(initdToReady)-1]) / float32(time.Millisecond)
-		p99 = float32(initdToReady[len(initdToReady)-1-len(initdToReady)/100]) /
-			float32(time.Millisecond)
-		mgr.initdToReadyLatency.Valid = true
-		mgr.initdToReadyLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	if len(firstToReady) > 0 {
-		mid = float32(firstToReady[len(firstToReady)/2]) / float32(time.Millisecond)
-		min = float32(firstToReady[0]) / float32(time.Millisecond)
-		max = float32(firstToReady[len(firstToReady)-1]) / float32(time.Millisecond)
-		p99 = float32(firstToReady[len(firstToReady)-1-len(firstToReady)/100]) /
-			float32(time.Millisecond)
-		mgr.firstToReadyLatency.Valid = true
-		mgr.firstToReadyLatency.Latency = perf_util.LatencyMetric{mid, min, max, p99}
-	}
-
-	for m, _ := range mgr.apiTimes {
-		sort.Slice(mgr.apiTimes[m],
-			func(i, j int) bool { return mgr.apiTimes[m][i] < mgr.apiTimes[m][j] })
-	}
-
 }
 
 func (mgr *PodManager) CalculateSuccessRate() int {
@@ -1339,4 +1192,50 @@ func (mgr *PodManager) CalculateSuccessRate() int {
 		return 0
 	}
 	return len(mgr.cReadyTimes) * 100 / len(mgr.cFirstTimes)
+}
+
+func calculateLatenciesBetweenStages(firstStageTimes map[string]metav1.Time, secondStageTimes map[string]metav1.Time) []time.Duration {
+	latencies := make([]time.Duration, 0)
+	for podName, firstStageTime := range firstStageTimes {
+		if secondStageTime, ok := secondStageTimes[podName]; ok {
+			latencies = append(latencies, secondStageTime.Time.Sub(firstStageTime.Time))
+		}
+	}
+	return latencies
+}
+
+func mapArray[T, V any](input []T, mapper func(T) V) []V {
+	result := make([]V, len(input))
+	for i, v := range input {
+		result[i] = mapper(v)
+	}
+	return result
+}
+
+func roundToMicroSeconds(durations []time.Duration) []time.Duration {
+	return mapArray(durations, func(t time.Duration) time.Duration {
+		return t.Round(time.Microsecond)
+	})
+}
+
+func sortDurations(durations []time.Duration) {
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+}
+
+func calculateDurationStatistics(durations []time.Duration) perf_util.OperationLatencyMetric {
+	if len(durations) > 0 {
+		var mid, min, max, p99 float32
+		mid = float32(durations[len(durations)/2]) / float32(time.Millisecond)
+		min = float32(durations[0]) / float32(time.Millisecond)
+		max = float32(durations[len(durations)-1]) / float32(time.Millisecond)
+		p99 = float32(durations[len(durations)-1-len(durations)/100]) /
+			float32(time.Millisecond)
+
+		return perf_util.OperationLatencyMetric{
+			Valid:   true,
+			Latency: perf_util.LatencyMetric{Mid: mid, Min: min, Max: max, P99: p99},
+		}
+	}
+
+	return perf_util.OperationLatencyMetric{}
 }
