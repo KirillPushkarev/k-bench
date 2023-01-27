@@ -17,7 +17,7 @@ limitations under the License.
 package manager
 
 import (
-	"sort"
+	"k-bench/metrics"
 	"strconv"
 	//"strings"
 	"fmt"
@@ -35,6 +35,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
+const deploymentResourceType = "Deployment"
 const deploymentNamePrefix string = "kbench-deployment-"
 
 /*
@@ -496,21 +497,7 @@ func (mgr *DeploymentManager) IsStable() bool {
 func (mgr *DeploymentManager) LogStats() {
 	mgr.podMgr.LogStats()
 
-	log.Infof("----------------------------- Deployment API Call Latencies (ms) " +
-		"-----------------------------")
-	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-
-	for m, _ := range mgr.apiTimes {
-		sort.Slice(mgr.apiTimes[m],
-			func(i, j int) bool { return mgr.apiTimes[m][i] < mgr.apiTimes[m][j] })
-		mid := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])/2]) / float32(time.Millisecond)
-		min := float32(mgr.apiTimes[m][0]) / float32(time.Millisecond)
-		max := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1]) / float32(time.Millisecond)
-		p99 := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1-len(mgr.apiTimes[m])/100]) /
-			float32(time.Millisecond)
-		log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" deployment latency: ",
-			mid, min, max, p99)
-	}
+	LogApiLatencies(deploymentResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *DeploymentManager) GetResourceName(opNum int, tid int) string {
@@ -548,11 +535,9 @@ func (mgr *DeploymentManager) SendMetricToWavefront(now time.Time, wfTags []perf
 func (mgr *DeploymentManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
 
-	for method, _ := range mgr.apiTimes {
-		sortDurations(mgr.apiTimes[method])
-	}
 	for method := range mgr.apiTimes {
-		mgr.apiCallLatency[method] = calculateDurationStatistics(mgr.apiTimes[method])
+		metrics.SortDurations(mgr.apiTimes[method])
+		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
@@ -561,7 +546,6 @@ func (mgr *DeploymentManager) CalculateSuccessRate() int {
 }
 
 func (mgr *DeploymentManager) GetStats() Stats {
-
 	return Stats{
 		podStats: &PodStats{
 			podThroughput:        mgr.podMgr.podThroughput,
@@ -577,6 +561,8 @@ func (mgr *DeploymentManager) GetStats() Stats {
 			firstToReadyLatency:  mgr.podMgr.firstToReadyLatency,
 			createToReadyLatency: mgr.podMgr.createToReadyLatency,
 		},
-		apiCallLatency: mgr.apiCallLatency,
+		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
+			deploymentResourceType: mgr.apiCallLatency,
+		},
 	}
 }

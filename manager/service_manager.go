@@ -18,7 +18,7 @@ package manager
 
 import (
 	"fmt"
-	"sort"
+	"k-bench/metrics"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const serviceResourceType = "Namespace"
 const serviceNamePrefix string = "kbench-service-"
 
 /*
@@ -61,6 +62,8 @@ type ServiceManager struct {
 
 	// Action functions
 	ActionFuncs map[string]func(*ServiceManager, interface{}) error
+
+	apiCallLatency map[string]perf_util.OperationLatencyMetric
 }
 
 func NewServiceManager() Manager {
@@ -395,22 +398,7 @@ func (mgr *ServiceManager) DeleteAll() error {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *ServiceManager) LogStats() {
-
-	log.Infof("----------------------------- Service API Call Latencies (ms) " +
-		"-----------------------------")
-	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-
-	for m, _ := range mgr.apiTimes {
-		sort.Slice(mgr.apiTimes[m],
-			func(i, j int) bool { return mgr.apiTimes[m][i] < mgr.apiTimes[m][j] })
-		mid := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])/2]) / float32(time.Millisecond)
-		min := float32(mgr.apiTimes[m][0]) / float32(time.Millisecond)
-		max := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1]) / float32(time.Millisecond)
-		p99 := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1-len(mgr.apiTimes[m])/100]) /
-			float32(time.Millisecond)
-		log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" service latency: ",
-			mid, min, max, p99)
-	}
+	LogApiLatencies(serviceResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *ServiceManager) GetResourceName(opNum int, tid int) string {
@@ -445,7 +433,19 @@ func (mgr *ServiceManager) SendMetricToWavefront(now time.Time, wfTags []perf_ut
 }
 
 func (mgr *ServiceManager) CalculateStats() {
-	// This manager has nothing to calculate
+	for method := range mgr.apiTimes {
+		metrics.SortDurations(mgr.apiTimes[method])
+		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+	}
+}
+
+func (mgr *ServiceManager) GetStats() Stats {
+	return Stats{
+		podStats: nil,
+		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
+			serviceResourceType: mgr.apiCallLatency,
+		},
+	}
 }
 
 func (mgr *ServiceManager) CalculateSuccessRate() int {

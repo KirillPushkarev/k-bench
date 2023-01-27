@@ -18,10 +18,10 @@ package manager
 
 import (
 	"fmt"
+	"k-bench/metrics"
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +69,8 @@ type ResourceManager struct {
 
 	// Action functions
 	ActionFuncs map[string]func(*ResourceManager, interface{}) error
+
+	apiCallLatency map[string]map[string]perf_util.OperationLatencyMetric
 }
 
 func NewResourceManager() Manager {
@@ -750,21 +752,18 @@ func (mgr *ResourceManager) DeleteAll() error {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *ResourceManager) LogStats() {
-
 	log.Infof("----------------------------- Resource API Call Latencies (ms) " +
 		"-----------------------------")
 	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-	for k, _ := range mgr.apiTimes {
-		for m, _ := range mgr.apiTimes[k] {
-			sort.Slice(mgr.apiTimes[k][m],
-				func(i, j int) bool { return mgr.apiTimes[k][m][i] < mgr.apiTimes[k][m][j] })
-			mid := float32(mgr.apiTimes[k][m][len(mgr.apiTimes[k][m])/2]) / float32(time.Millisecond)
-			min := float32(mgr.apiTimes[k][m][0]) / float32(time.Millisecond)
-			max := float32(mgr.apiTimes[k][m][len(mgr.apiTimes[k][m])-1]) / float32(time.Millisecond)
-			p99 := float32(mgr.apiTimes[k][m][len(mgr.apiTimes[k][m])-1-len(mgr.apiTimes[k][m])/100]) /
-				float32(time.Millisecond)
-			log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" "+k+" latency: ",
-				mid, min, max, p99)
+
+	for kind := range mgr.apiCallLatency {
+		for method, operationLatency := range mgr.apiCallLatency[kind] {
+			if operationLatency.Valid {
+				latency := operationLatency.Latency
+				log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" "+kind+" latency: ", latency.Mid, latency.Min, latency.Max, latency.P99)
+			} else {
+				log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" "+kind+" latency: ", "---", "---", "---", "---")
+			}
 		}
 	}
 }
@@ -804,10 +803,22 @@ func (mgr *ResourceManager) SendMetricToWavefront(now time.Time, wfTags []perf_u
 }
 
 func (mgr *ResourceManager) CalculateStats() {
-	// This manager has nothing to calculate
+	for kind := range mgr.apiTimes {
+		for method := range mgr.apiTimes[kind] {
+			metrics.SortDurations(mgr.apiTimes[kind][method])
+			mgr.apiCallLatency[kind][method] = metrics.CalculateDurationStatistics(mgr.apiTimes[kind][method])
+		}
+	}
 }
 
 func (mgr *ResourceManager) CalculateSuccessRate() int {
 	// This manager has nothing to calculate
 	return 0
+}
+
+func (mgr *ResourceManager) GetStats() Stats {
+	return Stats{
+		podStats:     nil,
+		apiCallStats: mgr.apiCallLatency,
+	}
 }

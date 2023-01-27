@@ -18,7 +18,7 @@ package manager
 
 import (
 	"fmt"
-	"sort"
+	"k-bench/metrics"
 	"strconv"
 	"sync"
 	"time"
@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const namespaceResourceType = "Namespace"
 const namespaceNamePrefix string = "kbench-namespace-"
 
 /*
@@ -53,6 +54,8 @@ type NamespaceManager struct {
 
 	// Action functions
 	ActionFuncs map[string]func(*NamespaceManager, interface{}) error
+
+	apiCallLatency map[string]perf_util.OperationLatencyMetric
 }
 
 func NewNamespaceManager() Manager {
@@ -67,10 +70,8 @@ func NewNamespaceManager() Manager {
 	af[UPDATE_ACTION] = (*NamespaceManager).Update
 
 	return &NamespaceManager{
-		apiTimes: apt,
-
-		alMutex: sync.Mutex{},
-
+		apiTimes:    apt,
+		alMutex:     sync.Mutex{},
 		ActionFuncs: af,
 	}
 }
@@ -307,22 +308,7 @@ func (mgr *NamespaceManager) IsStable() bool {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *NamespaceManager) LogStats() {
-
-	log.Infof("----------------------------- Namespace API Call Latencies (ms) " +
-		"-----------------------------")
-	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-
-	for m, _ := range mgr.apiTimes {
-		sort.Slice(mgr.apiTimes[m],
-			func(i, j int) bool { return mgr.apiTimes[m][i] < mgr.apiTimes[m][j] })
-		mid := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])/2]) / float32(time.Millisecond)
-		min := float32(mgr.apiTimes[m][0]) / float32(time.Millisecond)
-		max := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1]) / float32(time.Millisecond)
-		p99 := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1-len(mgr.apiTimes[m])/100]) /
-			float32(time.Millisecond)
-		log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" namespace latency: ",
-			mid, min, max, p99)
-	}
+	LogApiLatencies(namespaceResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *NamespaceManager) GetResourceName(opNum int, tid int) string {
@@ -357,7 +343,19 @@ func (mgr *NamespaceManager) SendMetricToWavefront(now time.Time, wfTags []perf_
 }
 
 func (mgr *NamespaceManager) CalculateStats() {
-	// This manager has nothing to calculate
+	for method := range mgr.apiTimes {
+		metrics.SortDurations(mgr.apiTimes[method])
+		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+	}
+}
+
+func (mgr *NamespaceManager) GetStats() Stats {
+	return Stats{
+		podStats: nil,
+		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
+			namespaceResourceType: mgr.apiCallLatency,
+		},
+	}
 }
 
 func (mgr *NamespaceManager) CalculateSuccessRate() int {

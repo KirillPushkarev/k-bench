@@ -21,6 +21,7 @@ import (
 	//"encoding/json"
 	"bytes"
 	"fmt"
+	"k-bench/metrics"
 	osexec "os/exec"
 	"sort"
 	"strconv"
@@ -44,6 +45,7 @@ import (
 	"k-bench/perf_util"
 )
 
+const podResourceType = "Pod"
 const podNamePrefix string = "kbench-pod-"
 
 /*
@@ -284,7 +286,7 @@ func (mgr *PodManager) UpdateBeforeDeletion(name string, ns string) {
 	mgr.statsMutex.Lock()
 	if _, ok := mgr.scheduleTimes[name]; !ok {
 		selector := fields.Set{
-			"involvedObject.kind":      "Pod",
+			"involvedObject.kind":      podResourceType,
 			"involvedObject.namespace": ns,
 			//"source":                   apiv1.DefaultSchedulerName,
 		}.AsSelector().String()
@@ -907,18 +909,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	log.Infof("--------------------------------- Pod API Call Latencies (ms) " +
-		"--------------------------------")
-	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-
-	for method, operationLatency := range mgr.apiCallLatency {
-		if operationLatency.Valid {
-			latency := operationLatency.Latency
-			log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" pod latency: ", latency.Mid, latency.Min, latency.Max, latency.P99)
-		} else {
-			log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" pod latency: ", "---", "---", "---", "---")
-		}
-	}
+	LogApiLatencies(podResourceType, mgr.apiCallLatency)
 
 	if mgr.scheToStartLatency.Latency.Mid < 0 {
 		log.Warning("There might be time skew between server and nodes, " +
@@ -1145,45 +1136,45 @@ func (mgr *PodManager) CalculateStats() {
 		createToReady []time.Duration
 	)
 
-	createToSched = calculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
-	schedToStart = calculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
-	startToPulled = calculateLatenciesBetweenStages(mgr.startTimes, mgr.pulledTimes)
-	pulledToRun = calculateLatenciesBetweenStages(mgr.pulledTimes, mgr.runTimes)
-	createToRun = calculateLatenciesBetweenStages(mgr.createTimes, mgr.runTimes)
+	createToSched = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
+	schedToStart = metrics.CalculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
+	startToPulled = metrics.CalculateLatenciesBetweenStages(mgr.startTimes, mgr.pulledTimes)
+	pulledToRun = metrics.CalculateLatenciesBetweenStages(mgr.pulledTimes, mgr.runTimes)
+	createToRun = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.runTimes)
 
-	firstToSched = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cSchedTimes))
-	schedToInit = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cSchedTimes, mgr.cInitedTimes))
-	initToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cInitedTimes, mgr.cReadyTimes))
-	firstToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cReadyTimes))
+	firstToSched = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cSchedTimes))
+	schedToInit = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cSchedTimes, mgr.cInitedTimes))
+	initToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cInitedTimes, mgr.cReadyTimes))
+	firstToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cReadyTimes))
 
-	createToReady = roundToMicroSeconds(calculateLatenciesBetweenStages(mgr.createTimes, mgr.cReadyTimes))
+	createToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.cReadyTimes))
 
-	sortDurations(createToSched)
-	sortDurations(schedToStart)
-	sortDurations(startToPulled)
-	sortDurations(pulledToRun)
-	sortDurations(createToRun)
-	sortDurations(firstToSched)
-	sortDurations(schedToInit)
-	sortDurations(initToReady)
-	sortDurations(firstToReady)
-	sortDurations(createToReady)
+	metrics.SortDurations(createToSched)
+	metrics.SortDurations(schedToStart)
+	metrics.SortDurations(startToPulled)
+	metrics.SortDurations(pulledToRun)
+	metrics.SortDurations(createToRun)
+	metrics.SortDurations(firstToSched)
+	metrics.SortDurations(schedToInit)
+	metrics.SortDurations(initToReady)
+	metrics.SortDurations(firstToReady)
+	metrics.SortDurations(createToReady)
 	for method, _ := range mgr.apiTimes {
-		sortDurations(mgr.apiTimes[method])
+		metrics.SortDurations(mgr.apiTimes[method])
 	}
 
-	mgr.createToScheLatency = calculateDurationStatistics(createToSched)
-	mgr.scheToStartLatency = calculateDurationStatistics(schedToStart)
-	mgr.startToPulledLatency = calculateDurationStatistics(startToPulled)
-	mgr.pulledToRunLatency = calculateDurationStatistics(pulledToRun)
-	mgr.createToRunLatency = calculateDurationStatistics(createToRun)
-	mgr.createToReadyLatency = calculateDurationStatistics(createToReady)
-	mgr.firstToSchedLatency = calculateDurationStatistics(firstToSched)
-	mgr.schedToInitdLatency = calculateDurationStatistics(schedToInit)
-	mgr.initdToReadyLatency = calculateDurationStatistics(initToReady)
-	mgr.firstToReadyLatency = calculateDurationStatistics(firstToReady)
+	mgr.createToScheLatency = metrics.CalculateDurationStatistics(createToSched)
+	mgr.scheToStartLatency = metrics.CalculateDurationStatistics(schedToStart)
+	mgr.startToPulledLatency = metrics.CalculateDurationStatistics(startToPulled)
+	mgr.pulledToRunLatency = metrics.CalculateDurationStatistics(pulledToRun)
+	mgr.createToRunLatency = metrics.CalculateDurationStatistics(createToRun)
+	mgr.createToReadyLatency = metrics.CalculateDurationStatistics(createToReady)
+	mgr.firstToSchedLatency = metrics.CalculateDurationStatistics(firstToSched)
+	mgr.schedToInitdLatency = metrics.CalculateDurationStatistics(schedToInit)
+	mgr.initdToReadyLatency = metrics.CalculateDurationStatistics(initToReady)
+	mgr.firstToReadyLatency = metrics.CalculateDurationStatistics(firstToReady)
 	for method := range mgr.apiTimes {
-		mgr.apiCallLatency[method] = calculateDurationStatistics(mgr.apiTimes[method])
+		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
@@ -1210,52 +1201,8 @@ func (mgr *PodManager) GetStats() Stats {
 			firstToReadyLatency:  mgr.firstToReadyLatency,
 			createToReadyLatency: mgr.createToReadyLatency,
 		},
-		apiCallLatency: mgr.apiCallLatency,
+		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
+			podResourceType: mgr.apiCallLatency,
+		},
 	}
-}
-
-func calculateLatenciesBetweenStages(firstStageTimes map[string]metav1.Time, secondStageTimes map[string]metav1.Time) []time.Duration {
-	latencies := make([]time.Duration, 0)
-	for podName, firstStageTime := range firstStageTimes {
-		if secondStageTime, ok := secondStageTimes[podName]; ok {
-			latencies = append(latencies, secondStageTime.Time.Sub(firstStageTime.Time))
-		}
-	}
-	return latencies
-}
-
-func mapArray[T, V any](input []T, mapper func(T) V) []V {
-	result := make([]V, len(input))
-	for i, v := range input {
-		result[i] = mapper(v)
-	}
-	return result
-}
-
-func roundToMicroSeconds(durations []time.Duration) []time.Duration {
-	return mapArray(durations, func(t time.Duration) time.Duration {
-		return t.Round(time.Microsecond)
-	})
-}
-
-func sortDurations(durations []time.Duration) {
-	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-}
-
-func calculateDurationStatistics(durations []time.Duration) perf_util.OperationLatencyMetric {
-	if len(durations) > 0 {
-		var mid, min, max, p99 float32
-		mid = float32(durations[len(durations)/2]) / float32(time.Millisecond)
-		min = float32(durations[0]) / float32(time.Millisecond)
-		max = float32(durations[len(durations)-1]) / float32(time.Millisecond)
-		p99 = float32(durations[len(durations)-1-len(durations)/100]) /
-			float32(time.Millisecond)
-
-		return perf_util.OperationLatencyMetric{
-			Valid:   true,
-			Latency: perf_util.LatencyMetric{Mid: mid, Min: min, Max: max, P99: p99},
-		}
-	}
-
-	return perf_util.OperationLatencyMetric{}
 }

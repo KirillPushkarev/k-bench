@@ -152,8 +152,24 @@ type PodStats struct {
 }
 
 type Stats struct {
-	podStats       *PodStats
-	apiCallLatency map[string]perf_util.OperationLatencyMetric
+	podStats     *PodStats
+	apiCallStats map[string]map[string]perf_util.OperationLatencyMetric
+}
+
+func (s *Stats) PodStats() *PodStats {
+	return s.podStats
+}
+
+func (s *Stats) SetPodStats(podStats *PodStats) {
+	s.podStats = podStats
+}
+
+func (s *Stats) ApiCallStats() map[string]map[string]perf_util.OperationLatencyMetric {
+	return s.apiCallStats
+}
+
+func (s *Stats) SetApiCallStats(apiCallStats map[string]map[string]perf_util.OperationLatencyMetric) {
+	s.apiCallStats = apiCallStats
 }
 
 func GetListOptions(s ActionSpec) metav1.ListOptions {

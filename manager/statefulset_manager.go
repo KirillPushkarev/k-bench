@@ -17,7 +17,7 @@ limitations under the License.
 package manager
 
 import (
-	"sort"
+	"k-bench/metrics"
 	"strconv"
 	//"strings"
 	"fmt"
@@ -35,6 +35,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
+const statefulsetResourceType = "StatefulSet"
 const statefulsetNamePrefix string = "kbench-statefulset-"
 
 /*
@@ -64,6 +65,8 @@ type StatefulSetManager struct {
 
 	// Action functions
 	ActionFuncs map[string]func(*StatefulSetManager, interface{}) error
+
+	apiCallLatency map[string]perf_util.OperationLatencyMetric
 }
 
 func NewStatefulSetManager() Manager {
@@ -495,21 +498,7 @@ func (mgr *StatefulSetManager) IsStable() bool {
 func (mgr *StatefulSetManager) LogStats() {
 	mgr.podMgr.LogStats()
 
-	log.Infof("----------------------------- StatefulSet API Call Latencies (ms) " +
-		"-----------------------------")
-	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
-
-	for m, _ := range mgr.apiTimes {
-		sort.Slice(mgr.apiTimes[m],
-			func(i, j int) bool { return mgr.apiTimes[m][i] < mgr.apiTimes[m][j] })
-		mid := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])/2]) / float32(time.Millisecond)
-		min := float32(mgr.apiTimes[m][0]) / float32(time.Millisecond)
-		max := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1]) / float32(time.Millisecond)
-		p99 := float32(mgr.apiTimes[m][len(mgr.apiTimes[m])-1-len(mgr.apiTimes[m])/100]) /
-			float32(time.Millisecond)
-		log.Infof("%-50v %-10v %-10v %-10v %-10v", m+" statefulset latency: ",
-			mid, min, max, p99)
-	}
+	LogApiLatencies(statefulsetResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *StatefulSetManager) GetResourceName(opNum int, tid int) string {
@@ -546,8 +535,35 @@ func (mgr *StatefulSetManager) SendMetricToWavefront(now time.Time, wfTags []per
 
 func (mgr *StatefulSetManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
+
+	for method := range mgr.apiTimes {
+		metrics.SortDurations(mgr.apiTimes[method])
+		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+	}
 }
 
 func (mgr *StatefulSetManager) CalculateSuccessRate() int {
 	return mgr.podMgr.CalculateSuccessRate()
+}
+
+func (mgr *StatefulSetManager) GetStats() Stats {
+	return Stats{
+		podStats: &PodStats{
+			podThroughput:        mgr.podMgr.podThroughput,
+			podAvgLatency:        mgr.podMgr.podAvgLatency,
+			createToScheLatency:  mgr.podMgr.createToScheLatency,
+			scheToStartLatency:   mgr.podMgr.scheToStartLatency,
+			startToPulledLatency: mgr.podMgr.startToPulledLatency,
+			pulledToRunLatency:   mgr.podMgr.pulledToRunLatency,
+			createToRunLatency:   mgr.podMgr.createToRunLatency,
+			firstToSchedLatency:  mgr.podMgr.firstToSchedLatency,
+			schedToInitdLatency:  mgr.podMgr.schedToInitdLatency,
+			initdToReadyLatency:  mgr.podMgr.initdToReadyLatency,
+			firstToReadyLatency:  mgr.podMgr.firstToReadyLatency,
+			createToReadyLatency: mgr.podMgr.createToReadyLatency,
+		},
+		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
+			statefulsetResourceType: mgr.apiCallLatency,
+		},
+	}
 }
