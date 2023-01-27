@@ -63,6 +63,8 @@ type DeploymentManager struct {
 
 	// Action functions
 	ActionFuncs map[string]func(*DeploymentManager, interface{}) error
+
+	apiCallLatency map[string]perf_util.OperationLatencyMetric
 }
 
 func NewDeploymentManager() Manager {
@@ -545,8 +547,36 @@ func (mgr *DeploymentManager) SendMetricToWavefront(now time.Time, wfTags []perf
 
 func (mgr *DeploymentManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
+
+	for method, _ := range mgr.apiTimes {
+		sortDurations(mgr.apiTimes[method])
+	}
+	for method := range mgr.apiTimes {
+		mgr.apiCallLatency[method] = calculateDurationStatistics(mgr.apiTimes[method])
+	}
 }
 
 func (mgr *DeploymentManager) CalculateSuccessRate() int {
 	return mgr.podMgr.CalculateSuccessRate()
+}
+
+func (mgr *DeploymentManager) GetStats() Stats {
+
+	return Stats{
+		podStats: &PodStats{
+			podThroughput:        mgr.podMgr.podThroughput,
+			podAvgLatency:        mgr.podMgr.podAvgLatency,
+			createToScheLatency:  mgr.podMgr.createToScheLatency,
+			scheToStartLatency:   mgr.podMgr.scheToStartLatency,
+			startToPulledLatency: mgr.podMgr.startToPulledLatency,
+			pulledToRunLatency:   mgr.podMgr.pulledToRunLatency,
+			createToRunLatency:   mgr.podMgr.createToRunLatency,
+			firstToSchedLatency:  mgr.podMgr.firstToSchedLatency,
+			schedToInitdLatency:  mgr.podMgr.schedToInitdLatency,
+			initdToReadyLatency:  mgr.podMgr.initdToReadyLatency,
+			firstToReadyLatency:  mgr.podMgr.firstToReadyLatency,
+			createToReadyLatency: mgr.podMgr.createToReadyLatency,
+		},
+		apiCallLatency: mgr.apiCallLatency,
+	}
 }

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"k-bench/manager"
+	"k-bench/reporting"
 	"k8s.io/client-go/dynamic"
 	"reflect"
 	"strings"
@@ -339,28 +340,32 @@ func Finalize() {
 			log.Infof("Pod Creation Success Rate: %v %%", successRate)
 		}
 
-		wavefrontPathDir := benchConfig.WavefrontPathDir
+		sendResultsToWavefront(resource, mgr, successRate, now, wfTags)
+	}
 
-		// Generate wavefront output if Wavefront is configured
-		if len(wavefrontPathDir) != 0 {
-			_, err := os.Stat(wavefrontPathDir)
+	reporters := []reporting.Reporter{reporting.JsonReporter{}}
+	for _, reporter := range reporters {
+		reporter.Report(mgrs)
+	}
+}
+
+func sendResultsToWavefront(resource string, mgr manager.Manager, successRate int, now time.Time, wfTags []perf_util.WavefrontTag) {
+	wavefrontPathDir := benchConfig.WavefrontPathDir
+
+	if len(wavefrontPathDir) != 0 {
+		_, err := os.Stat(wavefrontPathDir)
+		if err != nil {
+			workingDir := os.Args[0]
+			dir, err := filepath.Abs(filepath.Dir(workingDir))
 			if err != nil {
-				// If the given path is not valid, use the current working directory
-				dir, error := filepath.Abs(filepath.Dir(os.Args[0]))
-				if error != nil {
-					log.Fatal(error)
-					return
-				}
-				wavefrontPathDir = dir
+				log.Fatal(err)
+				return
 			}
+			wavefrontPathDir = dir
+		}
 
-			if _, ok := manager.PodRelatedResources[resource]; ok {
-				if successRate > successRateThreshold {
-					mgr.SendMetricToWavefront(now, wfTags, wavefrontPathDir, "")
-				}
-			} else {
-				mgr.SendMetricToWavefront(now, wfTags, wavefrontPathDir, "")
-			}
+		if _, isPodRelatedResource := manager.PodRelatedResources[resource]; !isPodRelatedResource || successRate > successRateThreshold {
+			mgr.SendMetricToWavefront(now, wfTags, wavefrontPathDir, "")
 		}
 	}
 }

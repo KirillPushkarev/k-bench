@@ -1194,6 +1194,26 @@ func (mgr *PodManager) CalculateSuccessRate() int {
 	return len(mgr.cReadyTimes) * 100 / len(mgr.cFirstTimes)
 }
 
+func (mgr *PodManager) GetStats() Stats {
+	return Stats{
+		podStats: &PodStats{
+			podThroughput:        mgr.podThroughput,
+			podAvgLatency:        mgr.podAvgLatency,
+			createToScheLatency:  mgr.createToScheLatency,
+			scheToStartLatency:   mgr.scheToStartLatency,
+			startToPulledLatency: mgr.startToPulledLatency,
+			pulledToRunLatency:   mgr.pulledToRunLatency,
+			createToRunLatency:   mgr.createToRunLatency,
+			firstToSchedLatency:  mgr.firstToSchedLatency,
+			schedToInitdLatency:  mgr.schedToInitdLatency,
+			initdToReadyLatency:  mgr.initdToReadyLatency,
+			firstToReadyLatency:  mgr.firstToReadyLatency,
+			createToReadyLatency: mgr.createToReadyLatency,
+		},
+		apiCallLatency: mgr.apiCallLatency,
+	}
+}
+
 func calculateLatenciesBetweenStages(firstStageTimes map[string]metav1.Time, secondStageTimes map[string]metav1.Time) []time.Duration {
 	latencies := make([]time.Duration, 0)
 	for podName, firstStageTime := range firstStageTimes {

@@ -18,13 +18,12 @@ package manager
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"strconv"
+	"strings"
 	//"k8s.io/client-go/kubernetes"
 	"k-bench/perf_util"
 	"time"
@@ -89,20 +88,20 @@ type Manager interface {
 	// Delete the specified resource
 	Delete(name interface{}) error
 
+	// Delete all the resources created by this manager
+	DeleteAll() error
+
 	// Calculate metrics
 	CalculateStats()
+
+	CalculateSuccessRate() int
+
+	GetStats() Stats
 
 	// Log stats for the manager
 	LogStats()
 
 	SendMetricToWavefront(now time.Time, wfTags []perf_util.WavefrontTag, wavefrontPathDir string, prefix string)
-
-	// Delete all the resources created by this manager
-	DeleteAll() error
-
-	// TODO: add a method to report stats
-
-	CalculateSuccessRate() int
 }
 
 type NewManagerFunc func() Manager
@@ -140,6 +139,21 @@ type CopySpec struct {
 	ContainerPath string
 	Upload        bool
 	ActionFilter  ActionSpec
+}
+
+type PodStats struct {
+	podThroughput                             float32
+	podAvgLatency                             float32
+	createToScheLatency, scheToStartLatency   perf_util.OperationLatencyMetric
+	startToPulledLatency, pulledToRunLatency  perf_util.OperationLatencyMetric
+	createToRunLatency, firstToSchedLatency   perf_util.OperationLatencyMetric
+	schedToInitdLatency, initdToReadyLatency  perf_util.OperationLatencyMetric
+	firstToReadyLatency, createToReadyLatency perf_util.OperationLatencyMetric
+}
+
+type Stats struct {
+	podStats       *PodStats
+	apiCallLatency map[string]perf_util.OperationLatencyMetric
 }
 
 func GetListOptions(s ActionSpec) metav1.ListOptions {
