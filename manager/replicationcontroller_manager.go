@@ -18,6 +18,7 @@ package manager
 
 import (
 	"fmt"
+	"k-bench/manager/logging"
 	"k-bench/metrics"
 	"strconv"
 	"strings"
@@ -525,7 +526,7 @@ func (mgr *ReplicationControllerManager) IsStable() bool {
 func (mgr *ReplicationControllerManager) LogStats() {
 	mgr.podMgr.LogStats()
 
-	LogApiLatencies(rcResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(rcResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *ReplicationControllerManager) GetResourceName(
@@ -566,6 +567,7 @@ func (mgr *ReplicationControllerManager) SendMetricToWavefront(
 func (mgr *ReplicationControllerManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
 
+	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
 		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])

@@ -17,6 +17,7 @@ limitations under the License.
 package manager
 
 import (
+	"k-bench/manager/logging"
 	"k-bench/metrics"
 	"strconv"
 	//"strings"
@@ -498,7 +499,7 @@ func (mgr *StatefulSetManager) IsStable() bool {
 func (mgr *StatefulSetManager) LogStats() {
 	mgr.podMgr.LogStats()
 
-	LogApiLatencies(statefulsetResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(statefulsetResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *StatefulSetManager) GetResourceName(opNum int, tid int) string {
@@ -536,6 +537,7 @@ func (mgr *StatefulSetManager) SendMetricToWavefront(now time.Time, wfTags []per
 func (mgr *StatefulSetManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
 
+	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
 		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])

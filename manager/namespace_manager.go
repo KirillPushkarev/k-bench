@@ -18,6 +18,7 @@ package manager
 
 import (
 	"fmt"
+	"k-bench/manager/logging"
 	"k-bench/metrics"
 	"strconv"
 	"sync"
@@ -308,7 +309,7 @@ func (mgr *NamespaceManager) IsStable() bool {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *NamespaceManager) LogStats() {
-	LogApiLatencies(namespaceResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(namespaceResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *NamespaceManager) GetResourceName(opNum int, tid int) string {
@@ -343,6 +344,7 @@ func (mgr *NamespaceManager) SendMetricToWavefront(now time.Time, wfTags []perf_
 }
 
 func (mgr *NamespaceManager) CalculateStats() {
+	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
 		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])

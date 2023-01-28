@@ -803,7 +803,9 @@ func (mgr *ResourceManager) SendMetricToWavefront(now time.Time, wfTags []perf_u
 }
 
 func (mgr *ResourceManager) CalculateStats() {
+	mgr.apiCallLatency = make(map[string]map[string]perf_util.OperationLatencyMetric, 0)
 	for kind := range mgr.apiTimes {
+		mgr.apiCallLatency[kind] = make(map[string]perf_util.OperationLatencyMetric, 0)
 		for method := range mgr.apiTimes[kind] {
 			metrics.SortDurations(mgr.apiTimes[kind][method])
 			mgr.apiCallLatency[kind][method] = metrics.CalculateDurationStatistics(mgr.apiTimes[kind][method])

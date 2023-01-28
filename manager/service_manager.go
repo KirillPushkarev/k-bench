@@ -18,6 +18,7 @@ package manager
 
 import (
 	"fmt"
+	"k-bench/manager/logging"
 	"k-bench/metrics"
 	"strconv"
 	"strings"
@@ -398,7 +399,7 @@ func (mgr *ServiceManager) DeleteAll() error {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *ServiceManager) LogStats() {
-	LogApiLatencies(serviceResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(serviceResourceType, mgr.apiCallLatency)
 }
 
 func (mgr *ServiceManager) GetResourceName(opNum int, tid int) string {
@@ -433,6 +434,7 @@ func (mgr *ServiceManager) SendMetricToWavefront(now time.Time, wfTags []perf_ut
 }
 
 func (mgr *ServiceManager) CalculateStats() {
+	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
 		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])

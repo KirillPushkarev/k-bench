@@ -21,6 +21,7 @@ import (
 	//"encoding/json"
 	"bytes"
 	"fmt"
+	"k-bench/manager/logging"
 	"k-bench/metrics"
 	osexec "os/exec"
 	"sort"
@@ -909,7 +910,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	LogApiLatencies(podResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(podResourceType, mgr.apiCallLatency)
 
 	if mgr.scheToStartLatency.Latency.Mid < 0 {
 		log.Warning("There might be time skew between server and nodes, " +
@@ -1173,6 +1174,8 @@ func (mgr *PodManager) CalculateStats() {
 	mgr.schedToInitdLatency = metrics.CalculateDurationStatistics(schedToInit)
 	mgr.initdToReadyLatency = metrics.CalculateDurationStatistics(initToReady)
 	mgr.firstToReadyLatency = metrics.CalculateDurationStatistics(firstToReady)
+
+	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
