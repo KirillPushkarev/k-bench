@@ -280,7 +280,7 @@ func Run(kubeConfig *restclient.Config,
 				}
 
 				if totalWait >= timeout {
-					log.Warningf("Timed out after waiting %v mili-seconds, moving forward...", timeout)
+					log.Warningf("Timed out after waiting %v milliseconds, moving forward...", timeout)
 				}
 			}
 

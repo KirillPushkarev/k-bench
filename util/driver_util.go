@@ -444,7 +444,7 @@ func runPodActions(
 
 		// TODO: add optional status checking logic here
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -577,7 +577,7 @@ func runDeploymentActions(
 		}
 
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -710,7 +710,7 @@ func runStatefulSetActions(
 		}
 
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -788,7 +788,7 @@ func runNamespaceActions(
 
 		// TODO: add optional status checking logic here
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -897,7 +897,7 @@ func runServiceActions(
 
 		// TODO: add optional status checking logic here
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -1023,7 +1023,7 @@ func runRcActions(
 
 		// TODO: add optional status checking logic here
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -1119,7 +1119,7 @@ func runResourceActions(
 
 		// TODO: add optional status checking logic here
 		if si < len(sleepTimes) {
-			log.Infof("Sleep %v mili-seconds after %v action", sleepTimes[si], action.Act)
+			log.Infof("Sleep %v milliseconds after %v action", sleepTimes[si], action.Act)
 			time.Sleep(time.Duration(sleepTimes[si]) * time.Millisecond)
 			si++
 		}
@@ -1162,7 +1162,7 @@ func waitForPodRelatedOps(
 
 			if len(pods.Items) > 0 {
 				log.Infof("Not all %v have been deleted, "+
-					"%v remaining, wait for %v mili-seconds...",
+					"%v remaining, wait for %v milliseconds...",
 					resKind, len(pods.Items), interval)
 				time.Sleep(time.Duration(interval) * time.Millisecond)
 				totalWait += interval
@@ -1202,7 +1202,7 @@ func waitForPodRelatedOps(
 					stable = rcMgr.IsStable()
 				}
 				if !stable {
-					log.Infof("Not all %v are running, wait for %v mili-seconds...",
+					log.Infof("Not all %v are running, wait for %v milliseconds...",
 						resKind, interval)
 					time.Sleep(time.Duration(interval) * time.Millisecond)
 					totalWait += interval

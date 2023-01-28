@@ -47,7 +47,7 @@ func HandlePredicate(
 	for totalWait < timeout {
 		ok := checkPredicateOk(clientset, client, config, ps)
 		if !ok {
-			log.Infof("Predicate not passed, sleep %v mili-seconds", interval)
+			log.Infof("Predicate not passed, sleep %v milliseconds", interval)
 			time.Sleep(time.Duration(interval) * time.Millisecond)
 			totalWait += interval
 		} else {
