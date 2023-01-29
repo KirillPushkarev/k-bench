@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const serviceResourceType = "Namespace"
+const serviceResourceType = "Service"
 const serviceNamePrefix string = "kbench-service-"
 
 /*
