@@ -24,6 +24,12 @@ func RoundToMicroSeconds(durations []time.Duration) []time.Duration {
 	})
 }
 
+func ConvertToMilliSeconds(durations []time.Duration) []float32 {
+	return common.MapArray(durations, func(t time.Duration) float32 {
+		return float32(t) / float32(time.Millisecond)
+	})
+}
+
 func SortDurations(durations []time.Duration) {
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 }

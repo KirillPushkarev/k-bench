@@ -64,7 +64,7 @@ type ServiceManager struct {
 	// Action functions
 	ActionFuncs map[string]func(*ServiceManager, interface{}) error
 
-	apiCallLatency map[string]perf_util.OperationLatencyMetric
+	apiTimesStats map[string]perf_util.OperationLatencyMetric
 }
 
 func NewServiceManager() Manager {
@@ -399,7 +399,7 @@ func (mgr *ServiceManager) DeleteAll() error {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *ServiceManager) LogStats() {
-	logging.LogApiLatencies(serviceResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(serviceResourceType, mgr.apiTimesStats)
 }
 
 func (mgr *ServiceManager) GetResourceName(opNum int, tid int) string {
@@ -434,18 +434,23 @@ func (mgr *ServiceManager) SendMetricToWavefront(now time.Time, wfTags []perf_ut
 }
 
 func (mgr *ServiceManager) CalculateStats() {
-	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
+	mgr.apiTimesStats = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
-		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+		mgr.apiTimesStats[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
 func (mgr *ServiceManager) GetStats() Stats {
+	apiTimesInMs := make(map[string][]float32)
+	for method := range mgr.apiTimes {
+		apiTimesInMs[method] = metrics.ConvertToMilliSeconds(mgr.apiTimes[method])
+	}
+
 	return Stats{
-		podStats: nil,
-		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
-			serviceResourceType: mgr.apiCallLatency,
+		PodStats: nil,
+		ApiTimesStats: map[string]map[string][]float32{
+			serviceResourceType: apiTimesInMs,
 		},
 	}
 }

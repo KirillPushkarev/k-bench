@@ -142,34 +142,23 @@ type CopySpec struct {
 }
 
 type PodStats struct {
-	podThroughput                             float32
-	podAvgLatency                             float32
-	createToScheLatency, scheToStartLatency   perf_util.OperationLatencyMetric
-	startToPulledLatency, pulledToRunLatency  perf_util.OperationLatencyMetric
-	createToRunLatency, firstToSchedLatency   perf_util.OperationLatencyMetric
-	schedToInitdLatency, initdToReadyLatency  perf_util.OperationLatencyMetric
-	firstToReadyLatency, createToReadyLatency perf_util.OperationLatencyMetric
+	PodThroughput        float32
+	PodAvgLatency        float32
+	CreateToScheLatency  []float32
+	ScheToStartLatency   []float32
+	StartToPulledLatency []float32
+	PulledToRunLatency   []float32
+	CreateToRunLatency   []float32
+	FirstToScheLatency   []float32
+	ScheToInitLatency    []float32
+	InitToReadyLatency   []float32
+	FirstToReadyLatency  []float32
+	CreateToReadyLatency []float32
 }
 
 type Stats struct {
-	podStats     *PodStats
-	apiCallStats map[string]map[string]perf_util.OperationLatencyMetric
-}
-
-func (s *Stats) PodStats() *PodStats {
-	return s.podStats
-}
-
-func (s *Stats) SetPodStats(podStats *PodStats) {
-	s.podStats = podStats
-}
-
-func (s *Stats) ApiCallStats() map[string]map[string]perf_util.OperationLatencyMetric {
-	return s.apiCallStats
-}
-
-func (s *Stats) SetApiCallStats(apiCallStats map[string]map[string]perf_util.OperationLatencyMetric) {
-	s.apiCallStats = apiCallStats
+	PodStats      *PodStats
+	ApiTimesStats map[string]map[string][]float32
 }
 
 func GetListOptions(s ActionSpec) metav1.ListOptions {

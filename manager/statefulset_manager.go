@@ -67,7 +67,7 @@ type StatefulSetManager struct {
 	// Action functions
 	ActionFuncs map[string]func(*StatefulSetManager, interface{}) error
 
-	apiCallLatency map[string]perf_util.OperationLatencyMetric
+	apiTimesStats map[string]perf_util.OperationLatencyMetric
 }
 
 func NewStatefulSetManager() Manager {
@@ -499,7 +499,7 @@ func (mgr *StatefulSetManager) IsStable() bool {
 func (mgr *StatefulSetManager) LogStats() {
 	mgr.podMgr.LogStats()
 
-	logging.LogApiLatencies(statefulsetResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(statefulsetResourceType, mgr.apiTimesStats)
 }
 
 func (mgr *StatefulSetManager) GetResourceName(opNum int, tid int) string {
@@ -537,10 +537,10 @@ func (mgr *StatefulSetManager) SendMetricToWavefront(now time.Time, wfTags []per
 func (mgr *StatefulSetManager) CalculateStats() {
 	mgr.podMgr.CalculateStats()
 
-	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
+	mgr.apiTimesStats = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
-		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+		mgr.apiTimesStats[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
@@ -549,23 +549,15 @@ func (mgr *StatefulSetManager) CalculateSuccessRate() int {
 }
 
 func (mgr *StatefulSetManager) GetStats() Stats {
+	apiTimesInMs := make(map[string][]float32)
+	for method := range mgr.apiTimes {
+		apiTimesInMs[method] = metrics.ConvertToMilliSeconds(mgr.apiTimes[method])
+	}
+
 	return Stats{
-		podStats: &PodStats{
-			podThroughput:        mgr.podMgr.podThroughput,
-			podAvgLatency:        mgr.podMgr.podAvgLatency,
-			createToScheLatency:  mgr.podMgr.createToScheLatency,
-			scheToStartLatency:   mgr.podMgr.scheToStartLatency,
-			startToPulledLatency: mgr.podMgr.startToPulledLatency,
-			pulledToRunLatency:   mgr.podMgr.pulledToRunLatency,
-			createToRunLatency:   mgr.podMgr.createToRunLatency,
-			firstToSchedLatency:  mgr.podMgr.firstToSchedLatency,
-			schedToInitdLatency:  mgr.podMgr.schedToInitdLatency,
-			initdToReadyLatency:  mgr.podMgr.initdToReadyLatency,
-			firstToReadyLatency:  mgr.podMgr.firstToReadyLatency,
-			createToReadyLatency: mgr.podMgr.createToReadyLatency,
-		},
-		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
-			statefulsetResourceType: mgr.apiCallLatency,
+		PodStats: mgr.podMgr.GetPodStats(),
+		ApiTimesStats: map[string]map[string][]float32{
+			statefulsetResourceType: apiTimesInMs,
 		},
 	}
 }

@@ -56,7 +56,7 @@ type NamespaceManager struct {
 	// Action functions
 	ActionFuncs map[string]func(*NamespaceManager, interface{}) error
 
-	apiCallLatency map[string]perf_util.OperationLatencyMetric
+	apiTimesStats map[string]perf_util.OperationLatencyMetric
 }
 
 func NewNamespaceManager() Manager {
@@ -309,7 +309,7 @@ func (mgr *NamespaceManager) IsStable() bool {
  * This function computes all the metrics and stores the results into the log file.
  */
 func (mgr *NamespaceManager) LogStats() {
-	logging.LogApiLatencies(namespaceResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(namespaceResourceType, mgr.apiTimesStats)
 }
 
 func (mgr *NamespaceManager) GetResourceName(opNum int, tid int) string {
@@ -344,18 +344,23 @@ func (mgr *NamespaceManager) SendMetricToWavefront(now time.Time, wfTags []perf_
 }
 
 func (mgr *NamespaceManager) CalculateStats() {
-	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
+	mgr.apiTimesStats = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
-		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+		mgr.apiTimesStats[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
 func (mgr *NamespaceManager) GetStats() Stats {
+	apiTimesInMs := make(map[string][]float32)
+	for method := range mgr.apiTimes {
+		apiTimesInMs[method] = metrics.ConvertToMilliSeconds(mgr.apiTimes[method])
+	}
+
 	return Stats{
-		podStats: nil,
-		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
-			namespaceResourceType: mgr.apiCallLatency,
+		PodStats: nil,
+		ApiTimesStats: map[string]map[string][]float32{
+			namespaceResourceType: apiTimesInMs,
 		},
 	}
 }

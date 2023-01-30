@@ -101,12 +101,28 @@ type PodManager struct {
 
 	startTimestamp string
 
-	createToScheLatency, scheToStartLatency   perf_util.OperationLatencyMetric
-	startToPulledLatency, pulledToRunLatency  perf_util.OperationLatencyMetric
-	createToRunLatency, firstToSchedLatency   perf_util.OperationLatencyMetric
-	schedToInitdLatency, initdToReadyLatency  perf_util.OperationLatencyMetric
-	firstToReadyLatency, createToReadyLatency perf_util.OperationLatencyMetric
-	apiCallLatency                            map[string]perf_util.OperationLatencyMetric
+	createToSche  []time.Duration
+	scheToStart   []time.Duration
+	startToPulled []time.Duration
+	pulledToRun   []time.Duration
+	createToRun   []time.Duration
+	firstToSched  []time.Duration
+	scheToInit    []time.Duration
+	initToReady   []time.Duration
+	firstToReady  []time.Duration
+	createToReady []time.Duration
+
+	createToScheStats  perf_util.OperationLatencyMetric
+	scheToStartStats   perf_util.OperationLatencyMetric
+	startToPulledStats perf_util.OperationLatencyMetric
+	pulledToRunStats   perf_util.OperationLatencyMetric
+	createToRunStats   perf_util.OperationLatencyMetric
+	firstToSchedStats  perf_util.OperationLatencyMetric
+	scheToInitStats    perf_util.OperationLatencyMetric
+	initToReadyStats   perf_util.OperationLatencyMetric
+	firstToReadyStats  perf_util.OperationLatencyMetric
+	createToReadyStats perf_util.OperationLatencyMetric
+	apiTimesStats      map[string]perf_util.OperationLatencyMetric
 }
 
 func NewPodManager() Manager {
@@ -792,7 +808,7 @@ func (mgr *PodManager) LogStats() {
 
 	log.Infof("%-50v %-10v", "Pod creation throughput (pods/minutes):",
 		mgr.podThroughput)
-	log.Infof("%-50v %-10v", "Pod creation average latency:",
+	log.Infof("%-50v %-10v", "Pod creation average latency (ms):",
 		mgr.podAvgLatency)
 
 	log.Infof("--------------------------------- Pod Startup Latencies (ms) " +
@@ -800,7 +816,7 @@ func (mgr *PodManager) LogStats() {
 	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
 
 	var latency perf_util.OperationLatencyMetric
-	latency = mgr.createToScheLatency
+	latency = mgr.createToScheStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod creation latency stats (server): ",
@@ -811,7 +827,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.scheToStartLatency
+	latency = mgr.scheToStartStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod scheduling latency stats (server): ",
@@ -822,7 +838,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.startToPulledLatency
+	latency = mgr.startToPulledStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod image pulling latency stats (server): ",
@@ -833,7 +849,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.pulledToRunLatency
+	latency = mgr.pulledToRunStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod starting latency stats (server): ",
@@ -844,7 +860,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.createToRunLatency
+	latency = mgr.createToRunStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod startup total latency (server): ",
@@ -855,7 +871,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.createToReadyLatency
+	latency = mgr.createToReadyStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod client-server e2e latency: ",
@@ -866,7 +882,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.firstToSchedLatency
+	latency = mgr.firstToSchedStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod scheduling latency stats (client): ",
@@ -877,7 +893,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.schedToInitdLatency
+	latency = mgr.scheToInitStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod initialization latency on kubelet (client): ",
@@ -888,7 +904,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.initdToReadyLatency
+	latency = mgr.initToReadyStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod starting latency stats (client): ",
@@ -899,7 +915,7 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	latency = mgr.firstToReadyLatency
+	latency = mgr.firstToReadyStats
 	if latency.Valid {
 		log.Infof("%-50v %-10v %-10v %-10v %-10v",
 			"Pod startup total latency (client): ",
@@ -910,15 +926,15 @@ func (mgr *PodManager) LogStats() {
 			"---", "---", "---", "---")
 	}
 
-	logging.LogApiLatencies(podResourceType, mgr.apiCallLatency)
+	logging.LogApiLatencies(podResourceType, mgr.apiTimesStats)
 
-	if mgr.scheToStartLatency.Latency.Mid < 0 {
+	if mgr.scheToStartStats.Latency.Mid < 0 {
 		log.Warning("There might be time skew between server and nodes, " +
 			"server side metrics such as scheduling latency stats (server) above is negative.")
 	}
 
 	// If we see negative server side results or server-client latency is larger than client latency by more than 3x
-	if mgr.negRes || mgr.createToReadyLatency.Latency.Mid/3 > mgr.firstToReadyLatency.Latency.Mid {
+	if mgr.negRes || mgr.createToReadyStats.Latency.Mid/3 > mgr.firstToReadyStats.Latency.Mid {
 		log.Warning("There might be time skew between client and server, " +
 			"and certain results (e.g., client-server e2e latency) above " +
 			"may have been affected.")
@@ -943,115 +959,114 @@ func (mgr *PodManager) SendMetricToWavefront(
 	points = append(points, perf_util.WavefrontDataPoint{"pod.creation.throuput",
 		mgr.podThroughput, now, mgr.source, wfTags})
 
-	//create to sched
-	if mgr.createToScheLatency.Valid {
+	if mgr.createToScheStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.creation.median.latency",
-			mgr.createToScheLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.createToScheStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.creation.min.latency",
-			mgr.createToScheLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.createToScheStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.creation.max.latency",
-			mgr.createToScheLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.createToScheStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.creation.p99.latency",
-			mgr.createToScheLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.createToScheStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.scheToStartLatency.Valid {
+	if mgr.scheToStartStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.scheduling.median.latency",
-			mgr.scheToStartLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.scheToStartStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.scheduling.min.latency",
-			mgr.scheToStartLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.scheToStartStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.scheduling.max.latency",
-			mgr.scheToStartLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.scheToStartStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.scheduling.p99.latency",
-			mgr.scheToStartLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.scheToStartStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.startToPulledLatency.Valid {
+	if mgr.startToPulledStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.image.pulling.median.latency",
-			mgr.startToPulledLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.startToPulledStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.image.pulling.min.latency",
-			mgr.startToPulledLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.startToPulledStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.image.pulling.max.latency",
-			mgr.startToPulledLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.startToPulledStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.image.pulling.p99.latency",
-			mgr.startToPulledLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.startToPulledStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.pulledToRunLatency.Valid {
+	if mgr.pulledToRunStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.starting.median.latency",
-			mgr.pulledToRunLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.pulledToRunStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.starting.min.latency",
-			mgr.pulledToRunLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.pulledToRunStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.starting.max.latency",
-			mgr.pulledToRunLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.pulledToRunStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.starting.p99.latency",
-			mgr.pulledToRunLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.pulledToRunStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.createToRunLatency.Valid {
+	if mgr.createToRunStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.startup.total.median.latency",
-			mgr.createToRunLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.createToRunStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.startup.total.min.latency",
-			mgr.createToRunLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.createToRunStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.startup.total.max.latency",
-			mgr.createToRunLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.createToRunStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.server.startup.total.p99.latency",
-			mgr.createToRunLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.createToRunStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.createToReadyLatency.Valid {
+	if mgr.createToReadyStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.clientServer.e2e.median.latency",
-			mgr.createToReadyLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.createToReadyStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.clientServer.e2e.min.latency",
-			mgr.createToReadyLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.createToReadyStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.clientServer.e2e.max.latency",
-			mgr.createToReadyLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.createToReadyStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.clientServer.e2e.p99.latency",
-			mgr.createToReadyLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.createToReadyStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.firstToSchedLatency.Valid {
+	if mgr.firstToSchedStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.scheduling.median.latency",
-			mgr.firstToSchedLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.firstToSchedStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.scheduling.min.latency",
-			mgr.firstToSchedLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.firstToSchedStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.scheduling.max.latency",
-			mgr.firstToSchedLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.firstToSchedStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.scheduling.p99.latency",
-			mgr.firstToSchedLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.firstToSchedStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.schedToInitdLatency.Valid {
+	if mgr.scheToInitStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.kubelet.initialize.median.latency",
-			mgr.schedToInitdLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.scheToInitStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.kubelet.initialize.min.latency",
-			mgr.schedToInitdLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.scheToInitStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.kubelet.initialize.max.latency",
-			mgr.schedToInitdLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.scheToInitStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.kubelet.initialize.p99.latency",
-			mgr.schedToInitdLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.scheToInitStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.initdToReadyLatency.Valid {
+	if mgr.initToReadyStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.starting.median.latency",
-			mgr.initdToReadyLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.initToReadyStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.starting.min.latency",
-			mgr.initdToReadyLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.initToReadyStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.starting.max.latency",
-			mgr.initdToReadyLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.initToReadyStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.starting.p99.latency",
-			mgr.initdToReadyLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.initToReadyStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
-	if mgr.firstToReadyLatency.Valid {
+	if mgr.firstToReadyStats.Valid {
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.startup.total.median.latency",
-			mgr.firstToReadyLatency.Latency.Mid, now, mgr.source, wfTags})
+			mgr.firstToReadyStats.Latency.Mid, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.startup.total.min.latency",
-			mgr.firstToReadyLatency.Latency.Min, now, mgr.source, wfTags})
+			mgr.firstToReadyStats.Latency.Min, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.startup.total.max.latency",
-			mgr.firstToReadyLatency.Latency.Max, now, mgr.source, wfTags})
+			mgr.firstToReadyStats.Latency.Max, now, mgr.source, wfTags})
 		points = append(points, perf_util.WavefrontDataPoint{"pod.client.startup.total.p99.latency",
-			mgr.firstToReadyLatency.Latency.P99, now, mgr.source, wfTags})
+			mgr.firstToReadyStats.Latency.P99, now, mgr.source, wfTags})
 	}
 
 	var mid, min, max, p99 float32
@@ -1099,7 +1114,7 @@ func (mgr *PodManager) CalculateStats() {
 		if opNum == -1 {
 			continue
 		}
-		podLatency := float32(readyTime.Time.Sub(mgr.cFirstTimes[podName].Time)) / float32(time.Second)
+		podLatency := float32(readyTime.Time.Sub(mgr.cFirstTimes[podName].Time)) / float32(time.Millisecond)
 		latPerOp[opNum] = append(latPerOp[opNum], podLatency)
 		totalLat += podLatency
 		podCount += 1
@@ -1122,62 +1137,47 @@ func (mgr *PodManager) CalculateStats() {
 
 	mgr.podThroughput = float32(accPods) * float32(60) / accStartTime
 
-	var (
-		createToSched []time.Duration
-		schedToStart  []time.Duration
-		startToPulled []time.Duration
-		pulledToRun   []time.Duration
-		createToRun   []time.Duration
+	mgr.createToSche = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
+	mgr.scheToStart = metrics.CalculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
+	mgr.startToPulled = metrics.CalculateLatenciesBetweenStages(mgr.startTimes, mgr.pulledTimes)
+	mgr.pulledToRun = metrics.CalculateLatenciesBetweenStages(mgr.pulledTimes, mgr.runTimes)
+	mgr.createToRun = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.runTimes)
 
-		firstToSched []time.Duration
-		schedToInit  []time.Duration
-		initToReady  []time.Duration
-		firstToReady []time.Duration
+	mgr.firstToSched = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cSchedTimes))
+	mgr.scheToInit = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cSchedTimes, mgr.cInitedTimes))
+	mgr.initToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cInitedTimes, mgr.cReadyTimes))
+	mgr.firstToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cReadyTimes))
 
-		createToReady []time.Duration
-	)
+	mgr.createToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.cReadyTimes))
 
-	createToSched = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
-	schedToStart = metrics.CalculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
-	startToPulled = metrics.CalculateLatenciesBetweenStages(mgr.startTimes, mgr.pulledTimes)
-	pulledToRun = metrics.CalculateLatenciesBetweenStages(mgr.pulledTimes, mgr.runTimes)
-	createToRun = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.runTimes)
-
-	firstToSched = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cSchedTimes))
-	schedToInit = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cSchedTimes, mgr.cInitedTimes))
-	initToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cInitedTimes, mgr.cReadyTimes))
-	firstToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.cFirstTimes, mgr.cReadyTimes))
-
-	createToReady = metrics.RoundToMicroSeconds(metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.cReadyTimes))
-
-	metrics.SortDurations(createToSched)
-	metrics.SortDurations(schedToStart)
-	metrics.SortDurations(startToPulled)
-	metrics.SortDurations(pulledToRun)
-	metrics.SortDurations(createToRun)
-	metrics.SortDurations(firstToSched)
-	metrics.SortDurations(schedToInit)
-	metrics.SortDurations(initToReady)
-	metrics.SortDurations(firstToReady)
-	metrics.SortDurations(createToReady)
+	metrics.SortDurations(mgr.createToSche)
+	metrics.SortDurations(mgr.scheToStart)
+	metrics.SortDurations(mgr.startToPulled)
+	metrics.SortDurations(mgr.pulledToRun)
+	metrics.SortDurations(mgr.createToRun)
+	metrics.SortDurations(mgr.firstToSched)
+	metrics.SortDurations(mgr.scheToInit)
+	metrics.SortDurations(mgr.initToReady)
+	metrics.SortDurations(mgr.firstToReady)
+	metrics.SortDurations(mgr.createToReady)
 	for method, _ := range mgr.apiTimes {
 		metrics.SortDurations(mgr.apiTimes[method])
 	}
 
-	mgr.createToScheLatency = metrics.CalculateDurationStatistics(createToSched)
-	mgr.scheToStartLatency = metrics.CalculateDurationStatistics(schedToStart)
-	mgr.startToPulledLatency = metrics.CalculateDurationStatistics(startToPulled)
-	mgr.pulledToRunLatency = metrics.CalculateDurationStatistics(pulledToRun)
-	mgr.createToRunLatency = metrics.CalculateDurationStatistics(createToRun)
-	mgr.createToReadyLatency = metrics.CalculateDurationStatistics(createToReady)
-	mgr.firstToSchedLatency = metrics.CalculateDurationStatistics(firstToSched)
-	mgr.schedToInitdLatency = metrics.CalculateDurationStatistics(schedToInit)
-	mgr.initdToReadyLatency = metrics.CalculateDurationStatistics(initToReady)
-	mgr.firstToReadyLatency = metrics.CalculateDurationStatistics(firstToReady)
+	mgr.createToScheStats = metrics.CalculateDurationStatistics(mgr.createToSche)
+	mgr.scheToStartStats = metrics.CalculateDurationStatistics(mgr.scheToStart)
+	mgr.startToPulledStats = metrics.CalculateDurationStatistics(mgr.startToPulled)
+	mgr.pulledToRunStats = metrics.CalculateDurationStatistics(mgr.pulledToRun)
+	mgr.createToRunStats = metrics.CalculateDurationStatistics(mgr.createToRun)
+	mgr.createToReadyStats = metrics.CalculateDurationStatistics(mgr.createToReady)
+	mgr.firstToSchedStats = metrics.CalculateDurationStatistics(mgr.firstToSched)
+	mgr.scheToInitStats = metrics.CalculateDurationStatistics(mgr.scheToInit)
+	mgr.initToReadyStats = metrics.CalculateDurationStatistics(mgr.initToReady)
+	mgr.firstToReadyStats = metrics.CalculateDurationStatistics(mgr.firstToReady)
 
-	mgr.apiCallLatency = make(map[string]perf_util.OperationLatencyMetric, 0)
+	mgr.apiTimesStats = make(map[string]perf_util.OperationLatencyMetric, 0)
 	for method := range mgr.apiTimes {
-		mgr.apiCallLatency[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
+		mgr.apiTimesStats[method] = metrics.CalculateDurationStatistics(mgr.apiTimes[method])
 	}
 }
 
@@ -1189,23 +1189,32 @@ func (mgr *PodManager) CalculateSuccessRate() int {
 }
 
 func (mgr *PodManager) GetStats() Stats {
+	apiTimesInMs := make(map[string][]float32)
+	for method := range mgr.apiTimes {
+		apiTimesInMs[method] = metrics.ConvertToMilliSeconds(mgr.apiTimes[method])
+	}
+
 	return Stats{
-		podStats: &PodStats{
-			podThroughput:        mgr.podThroughput,
-			podAvgLatency:        mgr.podAvgLatency,
-			createToScheLatency:  mgr.createToScheLatency,
-			scheToStartLatency:   mgr.scheToStartLatency,
-			startToPulledLatency: mgr.startToPulledLatency,
-			pulledToRunLatency:   mgr.pulledToRunLatency,
-			createToRunLatency:   mgr.createToRunLatency,
-			firstToSchedLatency:  mgr.firstToSchedLatency,
-			schedToInitdLatency:  mgr.schedToInitdLatency,
-			initdToReadyLatency:  mgr.initdToReadyLatency,
-			firstToReadyLatency:  mgr.firstToReadyLatency,
-			createToReadyLatency: mgr.createToReadyLatency,
+		PodStats: mgr.GetPodStats(),
+		ApiTimesStats: map[string]map[string][]float32{
+			podResourceType: apiTimesInMs,
 		},
-		apiCallStats: map[string]map[string]perf_util.OperationLatencyMetric{
-			podResourceType: mgr.apiCallLatency,
-		},
+	}
+}
+
+func (mgr *PodManager) GetPodStats() *PodStats {
+	return &PodStats{
+		PodThroughput:        mgr.podThroughput,
+		PodAvgLatency:        mgr.podAvgLatency,
+		CreateToScheLatency:  metrics.ConvertToMilliSeconds(mgr.createToSche),
+		ScheToStartLatency:   metrics.ConvertToMilliSeconds(mgr.scheToStart),
+		StartToPulledLatency: metrics.ConvertToMilliSeconds(mgr.startToPulled),
+		PulledToRunLatency:   metrics.ConvertToMilliSeconds(mgr.pulledToRun),
+		CreateToRunLatency:   metrics.ConvertToMilliSeconds(mgr.createToRun),
+		FirstToScheLatency:   metrics.ConvertToMilliSeconds(mgr.firstToSched),
+		ScheToInitLatency:    metrics.ConvertToMilliSeconds(mgr.scheToInit),
+		InitToReadyLatency:   metrics.ConvertToMilliSeconds(mgr.initToReady),
+		FirstToReadyLatency:  metrics.ConvertToMilliSeconds(mgr.firstToReady),
+		CreateToReadyLatency: metrics.ConvertToMilliSeconds(mgr.createToReady),
 	}
 }

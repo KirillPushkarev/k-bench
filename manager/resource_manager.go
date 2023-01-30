@@ -70,7 +70,7 @@ type ResourceManager struct {
 	// Action functions
 	ActionFuncs map[string]func(*ResourceManager, interface{}) error
 
-	apiCallLatency map[string]map[string]perf_util.OperationLatencyMetric
+	apiTimesStats map[string]map[string]perf_util.OperationLatencyMetric
 }
 
 func NewResourceManager() Manager {
@@ -756,8 +756,8 @@ func (mgr *ResourceManager) LogStats() {
 		"-----------------------------")
 	log.Infof("%-50v %-10v %-10v %-10v %-10v", " ", "median", "min", "max", "99%")
 
-	for kind := range mgr.apiCallLatency {
-		for method, operationLatency := range mgr.apiCallLatency[kind] {
+	for kind := range mgr.apiTimesStats {
+		for method, operationLatency := range mgr.apiTimesStats[kind] {
 			if operationLatency.Valid {
 				latency := operationLatency.Latency
 				log.Infof("%-50v %-10v %-10v %-10v %-10v", method+" "+kind+" latency: ", latency.Mid, latency.Min, latency.Max, latency.P99)
@@ -803,12 +803,12 @@ func (mgr *ResourceManager) SendMetricToWavefront(now time.Time, wfTags []perf_u
 }
 
 func (mgr *ResourceManager) CalculateStats() {
-	mgr.apiCallLatency = make(map[string]map[string]perf_util.OperationLatencyMetric, 0)
+	mgr.apiTimesStats = make(map[string]map[string]perf_util.OperationLatencyMetric, 0)
 	for kind := range mgr.apiTimes {
-		mgr.apiCallLatency[kind] = make(map[string]perf_util.OperationLatencyMetric, 0)
+		mgr.apiTimesStats[kind] = make(map[string]perf_util.OperationLatencyMetric, 0)
 		for method := range mgr.apiTimes[kind] {
 			metrics.SortDurations(mgr.apiTimes[kind][method])
-			mgr.apiCallLatency[kind][method] = metrics.CalculateDurationStatistics(mgr.apiTimes[kind][method])
+			mgr.apiTimesStats[kind][method] = metrics.CalculateDurationStatistics(mgr.apiTimes[kind][method])
 		}
 	}
 }
@@ -819,8 +819,15 @@ func (mgr *ResourceManager) CalculateSuccessRate() int {
 }
 
 func (mgr *ResourceManager) GetStats() Stats {
+	apiTimesInMs := make(map[string]map[string][]float32)
+	for kind := range mgr.apiTimes {
+		for method := range mgr.apiTimes[kind] {
+			apiTimesInMs[kind][method] = metrics.ConvertToMilliSeconds(mgr.apiTimes[kind][method])
+		}
+	}
+
 	return Stats{
-		podStats:     nil,
-		apiCallStats: mgr.apiCallLatency,
+		PodStats:      nil,
+		ApiTimesStats: apiTimesInMs,
 	}
 }

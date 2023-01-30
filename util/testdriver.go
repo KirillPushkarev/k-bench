@@ -343,7 +343,7 @@ func Finalize() {
 		sendResultsToWavefront(resource, mgr, successRate, now, wfTags)
 	}
 
-	reporters := []reporting.Reporter{reporting.JsonReporter{}}
+	reporters := []reporting.Reporter{reporting.NewJsonReporter(*outDir)}
 	for _, reporter := range reporters {
 		reporter.Report(mgrs)
 	}
