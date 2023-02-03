@@ -1135,7 +1135,7 @@ func (mgr *PodManager) CalculateStats() {
 		accPods += (curLen + 1) / 2
 	}
 
-	mgr.podThroughput = float32(accPods) * float32(60) / accStartTime
+	mgr.podThroughput = float32(accPods) * float32(60*1000) / accStartTime
 
 	mgr.createToSche = metrics.CalculateLatenciesBetweenStages(mgr.createTimes, mgr.scheduleTimes)
 	mgr.scheToStart = metrics.CalculateLatenciesBetweenStages(mgr.scheduleTimes, mgr.startTimes)
